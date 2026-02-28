@@ -1,0 +1,258 @@
+import pandas as pd
+import numpy as np
+
+from varanus.tbm_labeler import calculate_barriers, TBM_CONFIG
+from varanus.model import get_leverage
+from varanus.universe import HIGH_VOL_SUBTIER
+from varanus.risk import is_correlated_to_open as _risk_is_correlated
+
+BACKTEST_CONFIG = {
+    # Execution realism
+    "initial_capital":     5_000.0,   # USD
+    "maker_fee":           0.0002,    # 0.02% — limit order assumption
+    "taker_fee":           0.0005,    # 0.05% — market order fallback
+    "slippage_pct":        0.0008,    # 0.08% avg mid-cap slippage on 4h bar open
+    "entry_on_bar":        "open",    # Enter on next bar open after signal candle
+
+    # Flash-wick handling
+    "use_flash_wick_guard":     True,
+    "wick_body_close_required": True,
+
+    # Portfolio constraints (enforced every bar)
+    "max_concurrent_positions": 4,
+    "max_portfolio_leverage":   2.5,
+    "corr_block_threshold":     0.75, # Block new trade if open asset corr > 0.75
+    "corr_lookback_days":       20,
+
+    # Reporting
+    "equity_curve_freq": "4h",
+    "trade_log":         True,
+}
+
+BACKTEST_PASS_CRITERIA = {
+    "min_trades":        50,    # Statistical significance floor
+    "min_win_rate":      0.43,
+    "min_calmar":        0.50,
+    "max_drawdown":     -0.35,  # Hard reject above 35% drawdown
+    "min_profit_factor": 1.30,
+    "min_sharpe":        0.80,
+}
+
+def _check_barriers(bar: pd.Series, trade: dict, cfg: dict) -> dict | None:
+    """
+    Check TP, SL, and time barrier for a bar.
+    Flash-wick guard: SL requires body close beyond level, not wick touch.
+    """
+    d = trade['direction']
+
+    # Time barrier (checked first — prevents holding decaying positions)
+    if bar.name >= trade['max_hold_bar']:
+        return {'type': 'time', 'price': bar['close']}
+
+    # Take-Profit — wick touch is sufficient (we want the gain)
+    if d ==  1 and bar['high'] >= trade['take_profit']:
+        return {'type': 'tp', 'price': trade['take_profit']}
+    if d == -1 and bar['low']  <= trade['take_profit']:
+        return {'type': 'tp', 'price': trade['take_profit']}
+
+    # Stop-Loss — flash-wick guard requires body close beyond SL
+    if cfg['use_flash_wick_guard'] and cfg['wick_body_close_required']:
+        if d ==  1 and bar['close'] < trade['stop_loss']:
+            return {'type': 'sl', 'price': trade['stop_loss']}
+        if d == -1 and bar['close'] > trade['stop_loss']:
+            return {'type': 'sl', 'price': trade['stop_loss']}
+    else:
+        if d ==  1 and bar['low']  <= trade['stop_loss']:
+            return {'type': 'sl', 'price': trade['stop_loss']}
+        if d == -1 and bar['high'] >= trade['stop_loss']:
+            return {'type': 'sl', 'price': trade['stop_loss']}
+
+    return None
+
+def _calculate_pnl(trade: dict, outcome: dict, cfg: dict) -> float:
+    """Net PnL after fees and slippage."""
+    raw_ret  = trade['direction'] * (outcome['price'] - trade['entry_price']) \
+               / trade['entry_price']
+    fee      = cfg['taker_fee'] if outcome['type'] == 'sl' else cfg['maker_fee']
+    net_ret  = raw_ret - fee - cfg['slippage_pct']
+    return trade['position_usd'] * net_ret
+
+def _would_breach_leverage(open_trades: dict, capital: float, new_sig: dict, cfg: dict) -> bool:
+    """Check if adding new trade breaches max portfolio leverage."""
+    if capital <= 0: return True
+    current_notional = sum(t['position_usd'] for t in open_trades.values())
+    new_notional = capital * get_leverage(new_sig['confidence']) * (0.75 if new_sig.get('asset') in HIGH_VOL_SUBTIER else 1.0) / cfg['max_concurrent_positions']
+    return (current_notional + new_notional) / capital > cfg['max_portfolio_leverage']
+
+def _is_correlated_to_open(asset: str, open_trades: dict, corr_cache: dict, data: dict, cfg: dict) -> bool:
+    """Block entry if correlated to currently open positions."""
+    return _risk_is_correlated(asset, open_trades, data, cfg)
+
+def run_backtest(
+    data:    dict[str, pd.DataFrame],   # {asset: OHLCV DataFrame}
+    signals: dict[str, pd.DataFrame],   # {asset: signal DataFrame from STEP 2}
+    model,                              # Trained model from STEP 4
+    params:  dict,
+    cfg:     dict = BACKTEST_CONFIG,
+) -> tuple[pd.Series, pd.DataFrame]:
+    """
+    Simulate the full Varanus Tier 2 strategy over historical data.
+
+    Returns
+    -------
+    equity_curve : pd.Series  (indexed by timestamp)
+    trade_log    : pd.DataFrame
+    """
+    capital      = cfg['initial_capital']
+    equity       = {}
+    open_trades  = {}   # {asset: trade_dict}
+    trade_log    = []
+    corr_cache   = {}
+
+    all_timestamps = sorted(set().union(*[df.index for df in data.values()]))
+
+    for ts in all_timestamps:
+
+        # ── 1. Check barrier outcomes for all open trades ─────────────────
+        for asset, trade in list(open_trades.items()):
+            if ts not in data[asset].index:
+                continue
+            bar     = data[asset].loc[ts]
+            outcome = _check_barriers(bar, trade, cfg)
+            if outcome:
+                pnl     = _calculate_pnl(trade, outcome, cfg)
+                capital += pnl
+                trade_log.append({
+                    **trade,
+                    'exit_ts':    ts,
+                    'exit_price': outcome['price'],
+                    'outcome':    outcome['type'],
+                    'pnl_usd':    pnl,
+                })
+                del open_trades[asset]
+
+        # ── 2. Evaluate new signals ────────────────────────────────────────
+        # Gather all signals for this timestamp
+        current_signals = []
+        for asset, sig_df in signals.items():
+            if ts in sig_df.index and asset not in open_trades:
+                sig = sig_df.loc[ts].copy()
+                sig['asset'] = asset
+                if sig.get('confidence', 0) >= params.get('confidence_thresh', 0.80):
+                    current_signals.append(sig)
+        
+        # Sort signals by confidence (highest first) to prevent list-order bias
+        current_signals.sort(key=lambda x: x.get('confidence', 0), reverse=True)
+
+        for sig in current_signals:
+            if len(open_trades) >= cfg['max_concurrent_positions']:
+                break # Portfolio full
+                
+            asset = sig['asset']
+            if _would_breach_leverage(open_trades, capital, sig, cfg):
+                continue
+            if _is_correlated_to_open(asset, open_trades, corr_cache, data, cfg):
+                continue
+
+            # R:R gate before entry — translate Optuna param keys to TBM_CONFIG keys
+            tbm_cfg = TBM_CONFIG.copy()
+            if 'tp_atr_mult' in params: tbm_cfg['take_profit_atr'] = params['tp_atr_mult']
+            if 'sl_atr_mult' in params: tbm_cfg['stop_loss_atr']   = params['sl_atr_mult']
+            barriers = calculate_barriers(
+                sig['entry_price'], sig['atr'], sig['direction'], tbm_cfg, asset)
+            if not barriers.get('min_rr_satisfied', True):
+                continue
+
+            # Position sizing
+            lev          = get_leverage(sig['confidence'])
+            size_scalar  = 0.75 if asset in HIGH_VOL_SUBTIER else 1.0
+            position_usd = (capital * lev * size_scalar) / cfg['max_concurrent_positions']
+
+            open_trades[asset] = {
+                'asset':        asset,
+                'entry_ts':     ts,
+                'entry_price':  sig['entry_price'],
+                'direction':    sig['direction'],
+                'take_profit':  barriers['take_profit'],
+                'stop_loss':    barriers['stop_loss'],
+                'position_usd': position_usd,
+                'leverage':     lev,
+                'confidence':   sig['confidence'],
+                'rr_ratio':     barriers.get('rr_ratio', 0),
+                'max_hold_bar': ts + pd.Timedelta(hours=4 * params.get('max_holding', 30)),
+            }
+
+        equity[ts] = capital
+
+    # ── 3. Force-close remaining open trades at end-of-test ────────────
+    if len(all_timestamps) > 0:
+        last_ts = all_timestamps[-1]
+        for asset, trade in list(open_trades.items()):
+            if last_ts in data[asset].index:
+                last_price = data[asset].loc[last_ts, 'close']
+                outcome = {'type': 'time', 'price': last_price} # Classify EOT forced-close as time exit
+                pnl = _calculate_pnl(trade, outcome, cfg)
+                capital += pnl
+                trade_log.append({
+                    **trade,
+                    'exit_ts':    last_ts,
+                    'exit_price': last_price,
+                    'outcome':    'time',
+                    'pnl_usd':    pnl,
+                })
+        equity[last_ts] = capital
+
+    return pd.Series(equity), pd.DataFrame(trade_log)
+
+
+def _max_drawdown(equity: pd.Series) -> float:
+    roll_max = equity.cummax()
+    return ((equity - roll_max) / roll_max).min()
+
+
+def compute_metrics(equity_curve: pd.Series,
+                    trade_log: pd.DataFrame) -> dict:
+    """Full performance report for one backtest run."""
+    returns   = equity_curve.pct_change().dropna()
+    total_ret = (equity_curve.iloc[-1] / equity_curve.iloc[0]) - 1
+    n_days    = (equity_curve.index[-1] - equity_curve.index[0]).days
+    cagr      = (1 + total_ret) ** (365 / n_days) - 1 if n_days > 0 else 0
+    max_dd    = _max_drawdown(equity_curve)
+    calmar    = cagr / abs(max_dd) if max_dd != 0 else 0
+    sharpe    = returns.mean() / returns.std() * (365 * 6) ** 0.5  # 4h = 6 bars/day
+
+    wins  = trade_log['pnl_usd'] > 0 if len(trade_log) else pd.Series(dtype=bool)
+    loss  = trade_log['pnl_usd'] < 0 if len(trade_log) else pd.Series(dtype=bool)
+    profit_factor = (
+        abs(trade_log.loc[wins, 'pnl_usd'].sum() /
+            trade_log.loc[loss, 'pnl_usd'].sum())
+        if loss.any() else float('inf')
+    )
+    by_outcome = trade_log['outcome'].value_counts() if len(trade_log) else {}
+
+    return {
+        "total_return_pct": round(total_ret * 100, 2),
+        "cagr_pct":         round(cagr * 100, 2),
+        "max_drawdown_pct": round(max_dd * 100, 2),
+        "calmar_ratio":     round(calmar, 3),
+        "sharpe_ratio":     round(sharpe, 3),
+        "win_rate_pct":     round(wins.mean() * 100, 2) if len(trade_log) else 0,
+        "profit_factor":    round(profit_factor, 2),
+        "total_trades":     len(trade_log),
+        "tp_hits":          by_outcome.get('tp', 0),
+        "sl_hits":          by_outcome.get('sl', 0),
+        "time_exits":       by_outcome.get('time', 0),
+        "avg_win_usd":      round(trade_log.loc[wins, 'pnl_usd'].mean(), 2) if wins.any() else 0,
+        "avg_loss_usd":     round(trade_log.loc[loss, 'pnl_usd'].mean(), 2) if loss.any() else 0,
+    }
+
+def passes_backtest_gate(metrics: dict) -> bool:
+    c = BACKTEST_PASS_CRITERIA
+    return (
+        metrics['total_trades']      >= c['min_trades']         and
+        metrics['win_rate_pct']      >= c['min_win_rate'] * 100 and
+        metrics['calmar_ratio']      >= c['min_calmar']         and
+        metrics['max_drawdown_pct']  >= c['max_drawdown'] * 100 and
+        metrics['profit_factor']     >= c['min_profit_factor']  and
+        metrics['sharpe_ratio']      >= c['min_sharpe']
+    )
