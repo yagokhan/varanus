@@ -398,9 +398,8 @@ class PaperTrader:
                 break
 
             asset = cand["asset"]
-            lev         = get_leverage(cand["confidence"])
-            size_scalar = 0.75 if asset in HIGH_VOL_SUBTIER else 1.0
-            pos_usd     = (capital * lev * size_scalar) / RISK_CONFIG["max_concurrent_positions"]
+            lev     = get_leverage(cand["confidence"])
+            pos_usd = 100.0   # Fixed paper trade size: $100 per position
 
             mock_sig = {"confidence": cand["confidence"], "asset": asset}
             if would_breach_leverage(open_trades, capital, mock_sig, RISK_CONFIG):
