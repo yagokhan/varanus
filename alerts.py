@@ -108,6 +108,59 @@ def send_exit_alert(trade: dict, bot_token: str, chat_id: str,
     _post(msg, bot_token, chat_id)
 
 
+def send_no_signal_alert(cycle_time: str, equity: float, daily_pct: float,
+                         bot_token: str, chat_id: str,
+                         dry_run: bool = False) -> None:
+    """Send a no-signal notification at the end of each cycle."""
+    msg = (
+        f"🔍 *VARANUS T2 — No Signal*\n"
+        f"Cycle: {cycle_time}\n"
+        f"Scanned 15 assets — no setup above confidence threshold\n"
+        f"Equity: ${equity:,.2f} | Daily: {daily_pct:+.1f}%"
+    )
+    if dry_run:
+        print(f"[dry-run] No-signal alert:\n{msg}\n")
+        return
+    _post(msg, bot_token, chat_id)
+
+
+def send_heartbeat_alert(state: dict, health: dict,
+                         bot_token: str, chat_id: str) -> None:
+    """Send current portfolio status in response to a heartbeat command."""
+    open_trades  = state.get("open_trades", {})
+    closed       = state.get("closed_trades", [])
+    initial      = state.get("initial_capital", 0.0)
+    equity       = health["current_equity"]
+    total_pnl    = equity - initial
+    pnl_pct      = total_pnl / initial * 100 if initial else 0.0
+    pnl_sign     = "+" if total_pnl >= 0 else ""
+    halted       = "🚨 YES" if state.get("halted") else "✅ No"
+
+    lines = [
+        "💓 *VARANUS T2 — Heartbeat*",
+        f"Equity: ${equity:,.2f} ({pnl_sign}{pnl_pct:.1f}%)",
+        f"Daily: {health['daily_loss_pct']:+.1f}% | Drawdown: {health['drawdown_pct']:+.1f}%",
+        f"Halted: {halted}",
+        f"Open: {len(open_trades)} | Closed: {len(closed)}",
+    ]
+
+    if open_trades:
+        lines.append("── Open Positions ──")
+        for asset, t in open_trades.items():
+            d = "LONG ↑" if t["direction"] == 1 else "SHORT ↓"
+            lines.append(
+                f"  {asset} {d} @ {t['entry_price']} | "
+                f"TP {t['take_profit']} | SL {t['stop_loss']} | ${t['position_usd']:.0f}"
+            )
+
+    if closed:
+        wins    = sum(1 for t in closed if t.get("pnl_usd", 0) > 0)
+        tot_pnl = sum(t.get("pnl_usd", 0) for t in closed)
+        lines.append(f"── Closed: {wins}/{len(closed)} wins | PnL ${tot_pnl:+.2f} ──")
+
+    _post("\n".join(lines), bot_token, chat_id)
+
+
 def send_halt_alert(health: dict, bot_token: str, chat_id: str,
                     dry_run: bool = False) -> None:
     """

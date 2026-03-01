@@ -16,9 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+import requests
 
 import ccxt
 import numpy as np
@@ -34,7 +38,8 @@ from varanus.risk import (
     would_breach_leverage,
     compute_portfolio_leverage,
 )
-from varanus.alerts import send_alert, send_exit_alert, send_halt_alert
+from varanus.alerts import (send_alert, send_exit_alert, send_halt_alert,
+                            send_no_signal_alert, send_heartbeat_alert)
 
 logger = logging.getLogger(__name__)
 
@@ -641,6 +646,13 @@ class PaperTrader:
             h["current_equity"],
             h["daily_loss_pct"], h["drawdown_pct"],
         )
+
+        if not opened:
+            send_no_signal_alert(
+                now_str, h["current_equity"], h["daily_loss_pct"],
+                self._bot_token, self._chat_id, dry_run=self.dry_run,
+            )
+
         return {"closed": closed, "opened": opened, "halted": False}
 
     # ── CSV logging ───────────────────────────────────────────────────────────
@@ -652,6 +664,46 @@ class PaperTrader:
         df     = pd.DataFrame(closed)
         header = not TRADES_CSV.exists()
         df.to_csv(TRADES_CSV, mode="a", index=False, header=header)
+
+    # ── Telegram listener (heartbeat) ────────────────────────────────────────
+
+    def start_listener(self) -> None:
+        """
+        Start a background thread that polls Telegram for incoming messages.
+        When the authorised user sends 'heartbeat', reply with current status.
+        """
+        thread = threading.Thread(target=self._poll_loop, daemon=True, name="tg-listener")
+        thread.start()
+        logger.info("Telegram listener started (heartbeat command active).")
+
+    def _poll_loop(self) -> None:
+        offset = 0
+        url    = f"https://api.telegram.org/bot{self._bot_token}/getUpdates"
+        while True:
+            try:
+                resp = requests.get(
+                    url,
+                    params={"offset": offset, "timeout": 30, "allowed_updates": ["message"]},
+                    timeout=40,
+                )
+                data = resp.json()
+                for update in data.get("result", []):
+                    offset = update["update_id"] + 1
+                    msg    = update.get("message", {})
+                    text   = msg.get("text", "").strip().lower()
+                    from_id = str(msg.get("chat", {}).get("id", ""))
+                    if from_id != str(self._chat_id):
+                        continue   # Ignore messages from unknown chats
+                    if text == "heartbeat":
+                        logger.info("Heartbeat request received.")
+                        health = self.get_health()
+                        send_heartbeat_alert(
+                            self.state, health,
+                            self._bot_token, self._chat_id,
+                        )
+            except Exception as exc:
+                logger.debug("Telegram poll error: %s", exc)
+                time.sleep(5)
 
     # ── Status summary ────────────────────────────────────────────────────────
 

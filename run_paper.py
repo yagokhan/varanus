@@ -127,6 +127,9 @@ def main() -> None:
         trader.status()
         return
 
+    # ── Telegram heartbeat listener ───────────────────────────────────────────
+    trader.start_listener()
+
     # ── Continuous scheduler ──────────────────────────────────────────────────
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(
