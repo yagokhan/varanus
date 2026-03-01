@@ -125,7 +125,8 @@ def send_no_signal_alert(cycle_time: str, equity: float, daily_pct: float,
 
 
 def send_heartbeat_alert(state: dict, health: dict,
-                         bot_token: str, chat_id: str) -> None:
+                         bot_token: str, chat_id: str,
+                         next_cycle_mins: int = 0) -> None:
     """Send current portfolio status in response to a heartbeat command."""
     open_trades  = state.get("open_trades", {})
     closed       = state.get("closed_trades", [])
@@ -135,6 +136,8 @@ def send_heartbeat_alert(state: dict, health: dict,
     pnl_pct      = total_pnl / initial * 100 if initial else 0.0
     pnl_sign     = "+" if total_pnl >= 0 else ""
     halted       = "🚨 YES" if state.get("halted") else "✅ No"
+    h, m         = divmod(next_cycle_mins, 60)
+    countdown    = f"{h}h {m}m" if h else f"{m}m"
 
     lines = [
         "💓 *VARANUS T2 — Heartbeat*",
@@ -142,6 +145,7 @@ def send_heartbeat_alert(state: dict, health: dict,
         f"Daily: {health['daily_loss_pct']:+.1f}% | Drawdown: {health['drawdown_pct']:+.1f}%",
         f"Halted: {halted}",
         f"Open: {len(open_trades)} | Closed: {len(closed)}",
+        f"⏱ Next scan in: {countdown}",
     ]
 
     if open_trades:

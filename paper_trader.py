@@ -667,6 +667,23 @@ class PaperTrader:
 
     # ── Telegram listener (heartbeat) ────────────────────────────────────────
 
+    def _mins_to_next_cycle(self) -> int:
+        """Return minutes until the next scheduled 4h cycle (at xx:05 UTC)."""
+        from datetime import timedelta
+        now         = datetime.now(timezone.utc)
+        cycle_hours = [0, 4, 8, 12, 16, 20]
+        candidates  = []
+        for delta_days in (0, 1):
+            base = now.replace(hour=0, minute=0, second=0, microsecond=0) \
+                   + timedelta(days=delta_days)
+            for h in cycle_hours:
+                t = base + timedelta(hours=h, minutes=5)
+                if t > now:
+                    candidates.append(t)
+        if not candidates:
+            return 0
+        return int((min(candidates) - now).total_seconds() / 60)
+
     def start_listener(self) -> None:
         """
         Start a background thread that polls Telegram for incoming messages.
@@ -700,6 +717,7 @@ class PaperTrader:
                         send_heartbeat_alert(
                             self.state, health,
                             self._bot_token, self._chat_id,
+                            next_cycle_mins=self._mins_to_next_cycle(),
                         )
             except Exception as exc:
                 logger.debug("Telegram poll error: %s", exc)
