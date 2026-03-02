@@ -1,10 +1,50 @@
+"""
+varanus/alerts.py — Telegram Alert System (v5.0, Step 9).
+
+V5 changes vs v4:
+  - ALERT_FORMAT_V5: Power Setup ⚡ badge, confidence tier label
+  - send_alert(): adds power_setup badge to message header
+  - send_no_signal_alert(): references 20-asset universe (v5)
+  - Confidence tier labels: Base / Standard / High / ⚡ Power Setup
+  - EXIT_FORMAT, HALT_FORMAT, send_heartbeat_alert(): unchanged from v4
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
 import requests
 
-# ── Entry alert ───────────────────────────────────────────────────────────────
-ALERT_FORMAT = (
-    "🦎 *VARANUS T2* | {asset} {direction} @ {confidence:.0%}\n"
+logger = logging.getLogger(__name__)
+
+# ── Confidence tier labels (V5) ────────────────────────────────────────────────
+
+def _confidence_label(confidence: float) -> str:
+    """Return a human-readable V5 confidence tier label."""
+    if confidence >= 0.950:
+        return "⚡ POWER SETUP"
+    if confidence >= 0.920:
+        return "🔴 HIGH CONVICTION"
+    if confidence >= 0.850:
+        return "🟡 STANDARD"
+    return "⚪ BASE"
+
+
+def _leverage_label(leverage: float) -> str:
+    """Return formatted leverage string including Power Setup indicator."""
+    if leverage >= 5.0:
+        return "5x ⚡"
+    return f"{leverage:.0f}x"
+
+
+# ── Entry alert ────────────────────────────────────────────────────────────────
+
+ALERT_FORMAT_V5 = (
+    "{ps_badge}🦎 *VARANUS T2 v5* | {asset} {direction} @ {confidence:.0%}\n"
+    "Tier: {conf_label}\n"
     "Entry: {entry_price} | TP: {take_profit} | SL: {stop_loss}\n"
-    "R:R {rr_ratio:.1f}x | Lev: {leverage}x | ATR: {atr_14:.4f}\n"
+    "R:R {rr_ratio:.1f}x | Lev: {leverage_label} | ATR: {atr_14:.4f}\n"
     "MSS: {mss} | FVG✓ | Sweep✓ | RVol: {rvol:.2f}x | RSI: {rsi:.1f}\n"
     "HTF: {htf_bias} | Pos: ${position_usd:.0f} | Port Lev: {port_lev:.2f}x"
 )
@@ -16,22 +56,28 @@ REQUIRED_FIELDS = [
     "position_usd", "port_lev",
 ]
 
-# ── Exit alert ────────────────────────────────────────────────────────────────
+# ── Exit alert ─────────────────────────────────────────────────────────────────
+
 EXIT_FORMAT = (
-    "🔒 *VARANUS T2 EXIT* | {asset} {outcome}\n"
+    "🔒 *VARANUS T2 v5 EXIT* | {asset} {outcome}\n"
     "Entry: {entry_price:.4f} → Exit: {exit_price:.4f}\n"
     "PnL: {pnl_sign}${pnl_abs:.2f} | Duration: {duration_h:.0f}h\n"
     "Outcome: {outcome_label}"
 )
 
-# ── Circuit breaker alert ─────────────────────────────────────────────────────
+# ── Circuit breaker alert ──────────────────────────────────────────────────────
+
 HALT_FORMAT = (
-    "🚨 *VARANUS T2 — SIGNALS HALTED*\n"
+    "🚨 *VARANUS T2 v5 — SIGNALS HALTED*\n"
     "Daily Loss: {daily_loss_pct:.1f}% | Drawdown: {drawdown_pct:.1f}%\n"
     "Current Equity: ${current_equity:.2f}\n"
     "Reason: {reason}"
 )
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Transport
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _post(msg: str, bot_token: str, chat_id: str) -> None:
     """Send a Markdown message via the Telegram Bot API. Fails silently."""
@@ -43,21 +89,41 @@ def _post(msg: str, bot_token: str, chat_id: str) -> None:
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        print(f"[alerts] Warning: Telegram send failed: {e}")
+        logger.warning("Telegram send failed: %s", e)
 
 
-def send_alert(trade: dict, bot_token: str, chat_id: str,
-               dry_run: bool = False) -> None:
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alert senders
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def send_alert(
+    trade:     dict,
+    bot_token: str,
+    chat_id:   str,
+    dry_run:   bool = False,
+) -> None:
     """
     Validate and send an entry signal alert to Telegram.
+
     Raises ValueError if any REQUIRED_FIELDS are missing.
     In dry_run mode, prints the message instead of sending.
+
+    V5: Adds Power Setup ⚡ badge and confidence tier label to message.
     """
     missing = [f for f in REQUIRED_FIELDS if f not in trade]
     if missing:
         raise ValueError(f"Alert missing fields: {missing}")
 
-    msg = ALERT_FORMAT.format(**trade)
+    confidence = trade.get("confidence", 0.0)
+    leverage   = trade.get("leverage", 1.0)
+    ps         = bool(trade.get("power_setup", False)) or confidence >= 0.950
+
+    msg = ALERT_FORMAT_V5.format(
+        ps_badge       = "⚡ " if ps else "",
+        conf_label     = _confidence_label(confidence),
+        leverage_label = _leverage_label(leverage),
+        **trade,
+    )
 
     if dry_run:
         print(f"[dry-run] Entry alert:\n{msg}\n")
@@ -66,10 +132,15 @@ def send_alert(trade: dict, bot_token: str, chat_id: str,
     _post(msg, bot_token, chat_id)
 
 
-def send_exit_alert(trade: dict, bot_token: str, chat_id: str,
-                    dry_run: bool = False) -> None:
+def send_exit_alert(
+    trade:     dict,
+    bot_token: str,
+    chat_id:   str,
+    dry_run:   bool = False,
+) -> None:
     """
     Send a trade exit alert (TP / SL / time).
+
     Expects keys: asset, entry_price, exit_price, pnl_usd, outcome,
                   entry_ts, exit_ts.
     """
@@ -108,14 +179,19 @@ def send_exit_alert(trade: dict, bot_token: str, chat_id: str,
     _post(msg, bot_token, chat_id)
 
 
-def send_no_signal_alert(cycle_time: str, equity: float, daily_pct: float,
-                         bot_token: str, chat_id: str,
-                         dry_run: bool = False) -> None:
+def send_no_signal_alert(
+    cycle_time: str,
+    equity:     float,
+    daily_pct:  float,
+    bot_token:  str,
+    chat_id:    str,
+    dry_run:    bool = False,
+) -> None:
     """Send a no-signal notification at the end of each cycle."""
     msg = (
-        f"🔍 *VARANUS T2 — No Signal*\n"
+        f"🔍 *VARANUS T2 v5 — No Signal*\n"
         f"Cycle: {cycle_time}\n"
-        f"Scanned 15 assets — no setup above confidence threshold\n"
+        f"Scanned 20 assets — no setup above confidence threshold\n"
         f"Equity: ${equity:,.2f} | Daily: {daily_pct:+.1f}%"
     )
     if dry_run:
@@ -124,9 +200,13 @@ def send_no_signal_alert(cycle_time: str, equity: float, daily_pct: float,
     _post(msg, bot_token, chat_id)
 
 
-def send_heartbeat_alert(state: dict, health: dict,
-                         bot_token: str, chat_id: str,
-                         next_cycle_mins: int = 0) -> None:
+def send_heartbeat_alert(
+    state:             dict,
+    health:            dict,
+    bot_token:         str,
+    chat_id:           str,
+    next_cycle_mins:   int = 0,
+) -> None:
     """Send current portfolio status in response to a heartbeat command."""
     open_trades  = state.get("open_trades", {})
     closed       = state.get("closed_trades", [])
@@ -139,22 +219,27 @@ def send_heartbeat_alert(state: dict, health: dict,
     h, m         = divmod(next_cycle_mins, 60)
     countdown    = f"{h}h {m}m" if h else f"{m}m"
 
+    # Count Power Setup positions
+    n_ps = sum(1 for t in open_trades.values() if t.get("power_setup", False))
+
     lines = [
-        "💓 *VARANUS T2 — Heartbeat*",
+        "💓 *VARANUS T2 v5 — Heartbeat*",
         f"Equity: ${equity:,.2f} ({pnl_sign}{pnl_pct:.1f}%)",
         f"Daily: {health['daily_loss_pct']:+.1f}% | Drawdown: {health['drawdown_pct']:+.1f}%",
         f"Halted: {halted}",
-        f"Open: {len(open_trades)} | Closed: {len(closed)}",
+        f"Open: {len(open_trades)} (⚡ PS: {n_ps}) | Closed: {len(closed)}",
         f"⏱ Next scan in: {countdown}",
     ]
 
     if open_trades:
         lines.append("── Open Positions ──")
         for asset, t in open_trades.items():
-            d = "LONG ↑" if t["direction"] == 1 else "SHORT ↓"
+            d      = "LONG ↑" if t["direction"] == 1 else "SHORT ↓"
+            ps_tag = " ⚡" if t.get("power_setup") else ""
             lines.append(
-                f"  {asset} {d} @ {t['entry_price']} | "
-                f"TP {t['take_profit']} | SL {t['stop_loss']} | ${t['position_usd']:.0f}"
+                f"  {asset}{ps_tag} {d} @ {t['entry_price']} | "
+                f"TP {t['take_profit']} | SL {t['stop_loss']} | "
+                f"${t['position_usd']:.0f} {t['leverage']}x"
             )
 
     if closed:
@@ -165,22 +250,20 @@ def send_heartbeat_alert(state: dict, health: dict,
     _post("\n".join(lines), bot_token, chat_id)
 
 
-def send_halt_alert(health: dict, bot_token: str, chat_id: str,
-                    dry_run: bool = False) -> None:
+def send_halt_alert(
+    health:    dict,
+    bot_token: str,
+    chat_id:   str,
+    dry_run:   bool = False,
+) -> None:
     """
     Send a circuit-breaker halt notification.
     Expects the dict returned by risk.check_portfolio_health().
     """
-    daily  = health.get("daily_loss_pct", 0.0)
-    dd     = health.get("drawdown_pct", 0.0)
-    equity = health.get("current_equity", 0.0)
-
-    if daily <= -5.0 and dd <= -15.0:
-        reason = "Daily loss AND peak drawdown limits both breached"
-    elif daily <= -5.0:
-        reason = f"Daily loss limit breached ({daily:.1f}%)"
-    else:
-        reason = f"Peak drawdown limit breached ({dd:.1f}%)"
+    daily  = health.get("daily_loss_pct",  0.0)
+    dd     = health.get("drawdown_pct",    0.0)
+    equity = health.get("current_equity",  0.0)
+    reason = health.get("halt_reason",     "Portfolio risk limit breached")
 
     msg = HALT_FORMAT.format(
         daily_loss_pct = daily,

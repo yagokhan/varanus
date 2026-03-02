@@ -1,38 +1,53 @@
-import pandas as pd
+"""
+varanus/model.py — XGBoost Model + V5 Leverage Logic (Step 4).
+
+V5 changes vs v4:
+  - Leverage map: fourth tier added (confidence >= 0.95 → 5x Power Setup)
+  - confidence_threshold: resolved from params at predict time (not hardcoded)
+  - is_power_setup(): new helper for backtest/risk layer
+  - build_features() removed — imported from pa_features (no duplication)
+"""
+
+from __future__ import annotations
+
+import logging
+
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 
-from varanus.pa_features import detect_mss, detect_fvg, compute_atr
-from varanus.universe import HIGH_VOL_SUBTIER
+logger = logging.getLogger(__name__)
 
-FEATURE_LIST = [
-    # PA Features
-    "mss_signal",           # {-1, 0, 1}
-    "fvg_type",             # {-1, 0, 1} — sweep-validated only
-    "fvg_distance_atr",     # Distance to nearest valid FVG / ATR(14)
-    "fvg_age_candles",      # Candles since FVG formed
-    "sweep_occurred",       # Binary: sweep preceded the FVG?
-    "htf_bias",             # 1D MSS direction {-1, 0, 1}
+# ── Feature list (16 features — identical to v4) ──────────────────────────────
 
-    # Chameleon Confirmation
-    "relative_volume",      # Current vol / 20-period avg
-    "rsi_14",
-    "rsi_slope_3",          # RSI delta over last 3 candles
-    "ema21_55_alignment",   # {1, -1, 0}
-    "atr_percentile_100",   # ATR rank in 100-period window [0, 1]
-
-    # Market Character
-    "volatility_rank",      # ATR rank vs 100-period history [0, 1]
-    "volume_rank",          # Volume rank vs 100-period history [0, 1]
-    "asset_tier_flag",      # 0=standard Tier 2, 1=high-vol sub-tier
-    "hour_of_day",          # 4h candle UTC hour (session awareness)
-    "day_of_week",          # Market regime proxy
+FEATURE_LIST: list[str] = [
+    # PA features
+    "mss_signal", "fvg_type", "fvg_distance_atr", "fvg_age_candles",
+    "sweep_occurred", "htf_bias",
+    # Chameleon confirmation
+    "relative_volume", "rsi_14", "rsi_slope_3", "ema21_55_alignment",
+    "atr_percentile_100",
+    # Market character
+    "volatility_rank", "volume_rank", "asset_tier_flag",
+    "hour_of_day", "day_of_week",
 ]
 
-MODEL_CONFIG = {
-    "type":                "XGBoostClassifier",
-    "target_classes":      3,      # {-1, 0, 1}
-    "confidence_threshold": 0.80,  # Hard execution gate
+# ── V5 Leverage Map ───────────────────────────────────────────────────────────
+
+# (lower_inclusive, upper_exclusive): leverage_multiplier
+CONFIDENCE_LEVERAGE_MAP_V5: dict = {
+    (0.750, 0.850): 1.0,   # Base signal
+    (0.850, 0.920): 2.0,   # Standard conviction
+    (0.920, 0.950): 3.0,   # High conviction
+    (0.950, 1.001): 5.0,   # Power Setup — v5 only
+}
+
+# ── Model config ──────────────────────────────────────────────────────────────
+
+MODEL_CONFIG: dict = {
+    "type":                 "XGBoostClassifier",
+    "target_classes":       3,       # {-1, 0, 1}
+    "confidence_threshold": None,    # Resolved from best_params_v5.json at runtime
 
     "xgb_params": {
         "n_estimators":          500,
@@ -40,204 +55,145 @@ MODEL_CONFIG = {
         "learning_rate":         0.05,
         "subsample":             0.8,
         "colsample_bytree":      0.8,
-        "scale_pos_weight":      1.0,   # Rebalanced per fold
         "eval_metric":           "mlogloss",
         "early_stopping_rounds": 30,
         "use_label_encoder":     False,
         "objective":             "multi:softprob",
         "num_class":             3,
-        "random_state":          42
+        "random_state":          42,
     },
 }
 
-CONFIDENCE_LEVERAGE_MAP = {
-    (0.80, 0.85): 1.0,
-    (0.85, 0.92): 2.0,
-    (0.92, 1.00): 3.0,   # Tier 2 hard cap — never 5x
-}
+
+# ── Leverage functions ────────────────────────────────────────────────────────
 
 def get_leverage(confidence: float) -> float:
-    for (lo, hi), lev in CONFIDENCE_LEVERAGE_MAP.items():
-        if lo <= confidence <= hi: # Included exact 1.00 because upper bound is exclusive normally but 1.00 is max. Also handled below loop.
+    """
+    V5 leverage resolution with Power Setup tier.
+
+    Tiers:
+      [0.750, 0.850) → 1x   Base
+      [0.850, 0.920) → 2x   Standard conviction
+      [0.920, 0.950) → 3x   High conviction
+      [0.950, 1.001) → 5x   Power Setup (v5 new)
+
+    Returns 1.0 as safe default for any confidence below 0.750.
+    """
+    for (lo, hi), lev in CONFIDENCE_LEVERAGE_MAP_V5.items():
+        if lo <= confidence < hi:
             return lev
-    return 1.0  # Default safe if below threshold (or above due to float logic - effectively bounded)
-
-def build_features(df_4h: pd.DataFrame, df_1d: pd.DataFrame, asset: str) -> pd.DataFrame:
-    """
-    Constructs the feature vector for a given asset.
-    df_4h: Primary timeframe DataFrame
-    df_1d: HTF DataFrame for bias
-    """
-    df = df_4h.copy()
-
-    # Base indicators
-    atr = compute_atr(df, 14)
-
-    # Required Chameleon Features (assuming they're already calculated or we compute proxies if missing)
-    # We will compute them here for completeness if not provided.
-    
-    # 1. PA Features
-    df['mss_signal'] = detect_mss(df)
-    
-    # FVG features
-    from varanus.pa_features import FVG_CONFIG
-    fvg_df = detect_fvg(df, atr, FVG_CONFIG)
-    
-    df['fvg_type'] = 0
-    df['fvg_distance_atr'] = 0.0
-    df['fvg_age_candles'] = 0
-    df['sweep_occurred'] = 0
-    
-    last_fvg_idx = None
-    
-    # We need to compute fvg age and distance over time
-    for i in range(len(df)):
-        if i in fvg_df.index and fvg_df.loc[i, 'fvg_valid']:
-            last_fvg_idx = i
-            df.loc[df.index[i], 'fvg_type'] = fvg_df.loc[i, 'fvg_type']
-            df.loc[df.index[i], 'sweep_occurred'] = 1 # We know it occurred because fvg_valid is True and require_sweep is True
-            df.loc[df.index[i], 'fvg_age_candles'] = 0
-            
-            # fvg_distance_atr: distance from current close to nearest fvg bound
-            fvg_top = fvg_df.loc[i, 'fvg_top']
-            fvg_bot = fvg_df.loc[i, 'fvg_bottom']
-            close_price = df['close'].iloc[i]
-            
-            dist = min(abs(close_price - fvg_top), abs(close_price - fvg_bot))
-            df.loc[df.index[i], 'fvg_distance_atr'] = dist / atr.iloc[i] if atr.iloc[i] > 0 else 0
-        elif last_fvg_idx is not None:
-             age = i - last_fvg_idx
-             if age <= FVG_CONFIG['max_gap_age_candles']:
-                 df.loc[df.index[i], 'fvg_type'] = fvg_df.loc[last_fvg_idx, 'fvg_type']
-                 df.loc[df.index[i], 'sweep_occurred'] = 1
-                 df.loc[df.index[i], 'fvg_age_candles'] = age
-                 
-                 # fvg_distance_atr
-                 fvg_top = fvg_df.loc[last_fvg_idx, 'fvg_top']
-                 fvg_bot = fvg_df.loc[last_fvg_idx, 'fvg_bottom']
-                 close_price = df['close'].iloc[i]
-                 dist = min(abs(close_price - fvg_top), abs(close_price - fvg_bot))
-                 df.loc[df.index[i], 'fvg_distance_atr'] = dist / atr.iloc[i] if atr.iloc[i] > 0 else 0
+    return 1.0
 
 
-    # HTF Bias
-    htf_mss = detect_mss(df_1d)
-    
-    # Forward fill 1D bias to 4H timeframe
-    # Reindex HTF MSS to 4H index (forward filled)
-    # Note: Requires exact timestamp alignment to avoid lookahead bias.
-    # It's safer to map previous day's close bias to today's 4H bars.
-    df['date'] = df.index.date
-    df_1d['date'] = df_1d.index.date
-    # Map previous day's MSS signal
-    df_1d['shifted_mss'] = htf_mss.shift(1).fillna(0)
-    mapping = df_1d.drop_duplicates(subset=['date'], keep='last').set_index('date')['shifted_mss']
-    df['htf_bias'] = df['date'].map(mapping).fillna(0)
-    df = df.drop(columns=['date'])
+def is_power_setup(confidence: float) -> bool:
+    """True if this trade qualifies for the 5x Power Setup tier."""
+    return confidence >= 0.950
 
-    # 2. Chameleon Confirmation Features
-    # relative_volume
-    vol_ma = df['volume'].rolling(20).mean()
-    df['relative_volume'] = df['volume'] / vol_ma.replace(0, np.nan)
-    df['relative_volume'] = df['relative_volume'].fillna(1.0)
-    
-    # rsi_14
-    delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss.replace(0, np.nan)
-    df['rsi_14'] = 100 - (100 / (1 + rs))
-    df['rsi_14'] = df['rsi_14'].fillna(50)
-    
-    # rsi_slope_3
-    df['rsi_slope_3'] = df['rsi_14'].diff(3).fillna(0)
-    
-    # ema21_55_alignment
-    ema21 = df['close'].ewm(span=21, adjust=False).mean()
-    ema55 = df['close'].ewm(span=55, adjust=False).mean()
-    
-    df['ema21_55_alignment'] = 0
-    bull_align = (df['close'] > ema21) & (ema21 > ema55)
-    bear_align = (df['close'] < ema21) & (ema21 < ema55)
-    df.loc[bull_align, 'ema21_55_alignment'] = 1
-    df.loc[bear_align, 'ema21_55_alignment'] = -1
-    
-    # atr_percentile_100
-    df['atr_percentile_100'] = atr.rolling(100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1]).fillna(0.5)
 
-    # 3. Market Character
-    # volatility_rank (same as atr_percentile_100 effectively, but let's keep it distinct if intended differently, e.g. Close/Close vol)
-    # Using normalized ATR here as rank proxy
-    df['volatility_rank'] = df['atr_percentile_100'] 
-    
-    # volume_rank
-    df['volume_rank'] = df['volume'].rolling(100).apply(lambda x: pd.Series(x).rank(pct=True).iloc[-1]).fillna(0.5)
-    
-    # asset_tier_flag
-    df['asset_tier_flag'] = 1 if asset in HIGH_VOL_SUBTIER else 0
-    
-    # hour_of_day, day_of_week
-    df['hour_of_day'] = df.index.hour
-    df['day_of_week'] = df.index.dayofweek
-    
-    return df[FEATURE_LIST]
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# VaranusModel
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class VaranusModel:
-    def __init__(self, config: dict = MODEL_CONFIG):
-        self.config = config
-        self.model = None
-        self.classes_ = np.array([-1, 0, 1]) # Expected output format
+    """
+    XGBoost 3-class classifier wrapper for Varanus v5.
 
-    def fit(self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame = None, y_val: pd.Series = None):
-        """Train the XGBoost model."""
-        params = self.config['xgb_params'].copy()
-        early_stopping = params.pop('early_stopping_rounds', None)
-        
-        # XGBoost requires labels to be 0, 1, 2 for multi:softprob. 
-        # We map {-1, 0, 1} -> {0, 1, 2} internally.
-        y_train_mapped = y_train + 1 
-        
-        self.model = xgb.XGBClassifier(**params)
-        
-        eval_set = [(X_train, y_train_mapped)]
+    Internal label mapping: {-1, 0, 1} → {0, 1, 2} for XGBoost.
+    predict_proba() maps back so output columns correspond to classes [-1, 0, 1].
+    """
+
+    def __init__(self, config: dict = MODEL_CONFIG):
+        self.config  = config
+        self.model   = None
+        self.classes_ = np.array([-1, 0, 1])
+
+    def fit(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val:   pd.DataFrame = None,
+        y_val:   pd.Series   = None,
+    ) -> None:
+        """
+        Train the XGBoost model.
+
+        Applies Optuna-supplied XGB hyperparameters if present in self.config.
+        """
+        params = self.config["xgb_params"].copy()
+
+        # Apply Optuna hyperparameter overrides if stored in config
+        optuna_xgb_keys = {
+            "xgb_max_depth":    "max_depth",
+            "xgb_n_estimators": "n_estimators",
+            "xgb_lr":           "learning_rate",
+            "xgb_subsample":    "subsample",
+        }
+        for opt_key, xgb_key in optuna_xgb_keys.items():
+            if opt_key in self.config:
+                params[xgb_key] = self.config[opt_key]
+
+        early_stopping = params.pop("early_stopping_rounds", None)
+
+        # XGBoost requires 0-indexed labels: map {-1,0,1} → {0,1,2}
+        y_train_mapped = y_train + 1
+        self.model     = xgb.XGBClassifier(**params)
+
         if X_val is not None and y_val is not None:
-             y_val_mapped = y_val + 1
-             eval_set.append((X_val, y_val_mapped))
-             self.model.fit(
-                 X_train, y_train_mapped,
-                 eval_set=eval_set,
-                 verbose=False
-             )
+            y_val_mapped = y_val + 1
+            self.model.fit(
+                X_train, y_train_mapped,
+                eval_set    = [(X_train, y_train_mapped), (X_val, y_val_mapped)],
+                verbose     = False,
+            )
         else:
-             self.model.fit(X_train, y_train_mapped, verbose=False)
+            self.model.fit(X_train, y_train_mapped, verbose=False)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
-        """Returns probabilities for classes [-1, 0, 1]."""
+        """
+        Returns class probabilities shaped (n_samples, 3).
+        Columns correspond to classes [-1, 0, 1] respectively.
+        """
         if self.model is None:
             raise ValueError("Model has not been fitted yet.")
-        
+
         probs = self.model.predict_proba(X)
-        
-        # If model somehow misses a class (e.g. only 2 classes in training), pad it
-        # XGBClassifier handles this gracefully usually if num_class=3 is set.
+
         if probs.shape[1] < 3:
-             full_probs = np.zeros((probs.shape[0], 3))
-             # We rely on XGBoost returning the active classes, but just in case
-             for i, c in enumerate(self.model.classes_):
-                 full_probs[:, int(c)] = probs[:, i]
-             return full_probs
-             
+            full_probs = np.zeros((probs.shape[0], 3))
+            for i, c in enumerate(self.model.classes_):
+                full_probs[:, int(c)] = probs[:, i]
+            return full_probs
+
         return probs
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Returns the predicted class [-1, 0, 1] if confidence >= threshold, else 0."""
-        probs = self.predict_proba(X)
-        max_probs = np.max(probs, axis=1)
-        predictions = np.argmax(probs, axis=1) - 1 # Map back {0,1,2} -> {-1,0,1}
-        
-        # Apply confidence gate
-        mask = max_probs < self.config['confidence_threshold']
-        predictions[mask] = 0
-        
+    def predict(
+        self,
+        X:                  pd.DataFrame,
+        confidence_thresh:  float = None,
+    ) -> np.ndarray:
+        """
+        Returns predicted class {-1, 0, 1}.
+
+        Signals below confidence_thresh are suppressed to 0.
+
+        Args:
+            X:                   Feature DataFrame.
+            confidence_thresh:   Override threshold. Falls back to
+                                 self.config['confidence_threshold'] then 0.750.
+        """
+        probs      = self.predict_proba(X)
+        max_probs  = np.max(probs, axis=1)
+        predictions = np.argmax(probs, axis=1) - 1   # {0,1,2} → {-1,0,1}
+
+        thresh = (
+            confidence_thresh
+            or self.config.get("confidence_threshold")
+            or 0.750
+        )
+        predictions[max_probs < thresh] = 0
+
         return predictions
+
+    def get_confidence(self, X: pd.DataFrame) -> np.ndarray:
+        """Return the max class probability for each row."""
+        return np.max(self.predict_proba(X), axis=1)

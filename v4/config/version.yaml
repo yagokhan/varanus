@@ -1,0 +1,61 @@
+version:      "4.0.0"
+strategy:     "Structural Bridge"
+tier:         2
+asset_class:  "Mid-Cap Crypto (ex-BTC/ETH)"
+author:       "Varanus / Chameleon Project"
+last_updated: "2026-02-28"
+status:       "Production-Ready — Paper Trade Phase"
+
+optimization:
+  best_trial:   161
+  best_calmar:  4027.897
+  n_trials:     200
+  sampler:      "TPESampler"
+  pruner:       "HyperbandPruner"
+  params_file:  "config/best_params.json"
+
+best_params:
+  mss_lookback:       31
+  fvg_min_atr_ratio:  0.3920
+  fvg_max_age:        22
+  tp_atr_mult:        3.435
+  sl_atr_mult:        0.835
+  max_holding:        31
+  confidence_thresh:  0.8147
+  xgb_max_depth:      7
+  xgb_n_estimators:   218
+  xgb_lr:             0.0656
+  xgb_subsample:      0.957
+  rvol_threshold:     1.287
+  rsi_oversold:       36
+  rsi_overbought:     58
+  sweep_min_pct:      0.00641
+
+walk_forward_results:
+  folds:        5
+  consistency:  "100%"
+  calmar_mean:  12.031
+  win_rate_pct: 45.28
+  max_drawdown: -16.86
+
+validation_gates:
+  step3_tbm:       "PASS"
+  step4_model:     "PASS"
+  step5_backtest:  "PASS"
+  step6_wfv:       "PASS"
+  step8_risk:      "PASS"
+  step9_alerts:    "PASS"
+
+telegram:
+  bot:     "VaranusBotBot"
+  env_var: "VARANUS_BOT_TOKEN / VARANUS_CHAT_ID"
+
+changelog:
+  - "4.0.0: Initial Tier 2 specialization. MSS lookback 30-50. FVG Liquidity
+           Sweep filter. ATR-based TBM (2.5x/1.2x). Calmar Ratio Optuna
+           objective (200 trials, best=4027.9). Flash-wick guard. Confidence
+           gate 0.8147. Full backtest engine with 6-metric acceptance gate
+           and portfolio-level simulation across 15 Tier 2 assets. Risk
+           management layer (circuit breakers, correlation block, leverage
+           caps). Telegram alert system with entry/exit/halt notifications.
+           Walk-forward validation: 5/5 folds PASS, 100% consistency."

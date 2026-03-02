@@ -1,61 +1,70 @@
-version:      "4.0.0"
-strategy:     "Structural Bridge"
+version:      "5.0.0"
+strategy:     "High-Resolution Regime Adaptation"
 tier:         2
 asset_class:  "Mid-Cap Crypto (ex-BTC/ETH)"
 author:       "Varanus / Chameleon Project"
-last_updated: "2026-02-28"
-status:       "Production-Ready — Paper Trade Phase"
+last_updated: "2026-03-02"
+status:       "Optimization Phase — HPO pending"
 
 optimization:
-  best_trial:   161
-  best_calmar:  4027.897
-  n_trials:     200
+  best_trial:   null
+  best_score:   null
+  n_trials:     300
   sampler:      "TPESampler"
   pruner:       "HyperbandPruner"
-  params_file:  "config/best_params.json"
+  objective:    "profit_factor × log1p(net_return_pct)"
+  params_file:  "config/best_params_v5.json"
+  db_file:      "config/optuna_v5.db"
 
-best_params:
-  mss_lookback:       31
-  fvg_min_atr_ratio:  0.3920
-  fvg_max_age:        22
-  tp_atr_mult:        3.435
-  sl_atr_mult:        0.835
-  max_holding:        31
-  confidence_thresh:  0.8147
-  xgb_max_depth:      7
-  xgb_n_estimators:   218
-  xgb_lr:             0.0656
-  xgb_subsample:      0.957
-  rvol_threshold:     1.287
-  rsi_oversold:       36
-  rsi_overbought:     58
-  sweep_min_pct:      0.00641
+walk_forward:
+  n_folds:        8
+  train_ratio:    0.40
+  val_ratio:      0.30
+  test_ratio:     0.30
+  gap_candles:    24
+  consistency_req: 0.75   # 6 of 8 folds must PASS
 
-walk_forward_results:
-  folds:        5
-  consistency:  "100%"
-  calmar_mean:  12.031
-  win_rate_pct: 45.28
-  max_drawdown: -16.86
+baseline:
+  archive:      "v4/"
+  v4_version:   "4.0.0"
+  v4_params:    "v4/config/best_params.json"
+  v4_calmar:    4027.9
+  note:         "v4 frozen archive — DO NOT import from v5 modules"
 
-validation_gates:
-  step3_tbm:       "PASS"
-  step4_model:     "PASS"
-  step5_backtest:  "PASS"
-  step6_wfv:       "PASS"
-  step8_risk:      "PASS"
-  step9_alerts:    "PASS"
+leverage_map_v5:
+  - tier: "Base"
+    confidence_range: "[0.750, 0.850)"
+    leverage: 1
+  - tier: "Standard"
+    confidence_range: "[0.850, 0.920)"
+    leverage: 2
+  - tier: "High Conviction"
+    confidence_range: "[0.920, 0.950)"
+    leverage: 3
+  - tier: "Power Setup"
+    confidence_range: "[0.950, 1.000]"
+    leverage: 5
+    note: "v5 new — +25% notional scalar applied before leverage"
+
+acceptance_gate_v5:
+  min_trades:        50
+  min_win_rate:      0.43
+  min_profit_factor: 1.50   # raised from 1.30 in v4
+  max_drawdown:     -0.15   # aligned to HPO constraint
+  min_sharpe:        0.90
+  min_calmar:        0.60
 
 telegram:
   bot:     "VaranusBotBot"
   env_var: "VARANUS_BOT_TOKEN / VARANUS_CHAT_ID"
 
 changelog:
-  - "4.0.0: Initial Tier 2 specialization. MSS lookback 30-50. FVG Liquidity
-           Sweep filter. ATR-based TBM (2.5x/1.2x). Calmar Ratio Optuna
-           objective (200 trials, best=4027.9). Flash-wick guard. Confidence
-           gate 0.8147. Full backtest engine with 6-metric acceptance gate
-           and portfolio-level simulation across 15 Tier 2 assets. Risk
-           management layer (circuit breakers, correlation block, leverage
-           caps). Telegram alert system with entry/exit/halt notifications.
-           Walk-forward validation: 5/5 folds PASS, 100% consistency."
+  - "5.0.0: V5 structural upgrade. 8-fold rolling WFV (40/30/30). Power Setup
+           5x leverage tier (confidence >= 0.95). HPO objective: PF×log1p(Net%).
+           Hard MaxDD < 15% constraint. New search: confidence_thresh [0.750-0.880],
+           sl_atr_mult [0.700-1.200], rr_ratio [3.5-5.0]. 31-bar time exit LOCKED.
+           Universe expanded to 20 assets. R:R-derived TP (sl_atr×rr_ratio×ATR).
+           Acceptance gate tightened: PF 1.30→1.50, MaxDD -35%→-15%. Max portfolio
+           leverage 2.5→3.5. Power Setup size scalar 1.25x. Correlation guard
+           and flash-wick guard preserved from v4."
+  - "4.0.0: Initial Tier 2 specialization. [See v4/config/version.yaml]"

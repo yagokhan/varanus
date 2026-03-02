@@ -1,0 +1,30 @@
+{
+    "_meta": {
+        "version":    "5.0.0",
+        "status":     "PLACEHOLDER — Run run_optimization.py to populate",
+        "objective":  "profit_factor × log1p(net_return_pct)",
+        "constraint": "max_drawdown < -15% → score = -999",
+        "n_trials":   300,
+        "best_trial": null,
+        "best_score": null,
+        "optimized_on": null
+    },
+    "_v5_lock": {
+        "max_holding_candles": 31,
+        "note": "V5 TIME EXIT LOCK — NOT an Optuna parameter. NEVER modify."
+    },
+    "confidence_thresh":  null,
+    "sl_atr_mult":        null,
+    "rr_ratio":           null,
+    "mss_lookback":       null,
+    "fvg_min_atr_ratio":  null,
+    "fvg_max_age":        null,
+    "sweep_min_pct":      null,
+    "rvol_threshold":     null,
+    "rsi_oversold":       null,
+    "rsi_overbought":     null,
+    "xgb_max_depth":      null,
+    "xgb_n_estimators":   null,
+    "xgb_lr":             null,
+    "xgb_subsample":      null
+}
