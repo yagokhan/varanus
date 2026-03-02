@@ -172,26 +172,30 @@ def main() -> None:
     # ── 4. Full 8-fold Walk-Forward Validation ────────────────────────────────
     logger.info("Running full 8-fold Walk-Forward Validation ...")
 
-    wfv_results = run_walk_forward(
-        data_4h     = data_4h,
-        data_1d     = data_1d,
-        params      = best_params,
+    folds_df, consistency, all_trades_df = run_walk_forward(
+        df_dict_4h = data_4h,
+        df_dict_1d = data_1d,
+        params     = best_params,
     )
 
     # ── 5. Summary ───────────────────────────────────────────────────────────
-    folds_df    = wfv_results["fold_results"]
-    summary     = wfv_results["summary"]
+    n_folds      = len(folds_df)
+    n_pass       = int(folds_df["fold_pass"].sum()) if not folds_df.empty else 0
+    calmar_mean  = folds_df["calmar_ratio"].mean()  if not folds_df.empty else 0
+    wr_mean      = folds_df["win_rate_pct"].mean()  if not folds_df.empty else 0
+    max_dd_worst = folds_df["max_drawdown_pct"].min() if not folds_df.empty else 0
+    wfv_pass     = consistency >= 0.75
 
     print("\n" + "═" * 70)
     print("  Walk-Forward Validation Summary")
     print("═" * 70)
-    print(f"  Folds run:    {summary.get('n_folds', 0)}")
-    print(f"  Folds PASS:   {summary.get('n_pass', 0)} / {summary.get('n_folds', 0)}")
-    print(f"  Consistency:  {summary.get('consistency_pct', 0):.1f}%")
-    print(f"  Calmar (mean): {summary.get('calmar_mean', 0):.3f}")
-    print(f"  Win Rate:     {summary.get('win_rate_mean', 0):.1f}%")
-    print(f"  Max DD (worst): {summary.get('max_dd_worst', 0):.2f}%")
-    print(f"  WFV PASS:     {'✅ YES' if summary.get('wfv_pass') else '❌ NO'}")
+    print(f"  Folds run:      {n_folds}")
+    print(f"  Folds PASS:     {n_pass} / {n_folds}")
+    print(f"  Consistency:    {consistency * 100:.1f}%")
+    print(f"  Calmar (mean):  {calmar_mean:.3f}")
+    print(f"  Win Rate (mean):{wr_mean:.1f}%")
+    print(f"  Max DD (worst): {max_dd_worst:.2f}%")
+    print(f"  WFV PASS:       {'✅ YES' if wfv_pass else '❌ NO'}")
     print("═" * 70)
 
     # Save fold results
@@ -201,7 +205,7 @@ def main() -> None:
     folds_df.to_csv(folds_path, index=False)
     logger.info("WFV fold details saved to %s", folds_path)
 
-    if not summary.get("wfv_pass"):
+    if not wfv_pass:
         logger.warning("WFV FAILED — re-run HPO with more trials or review params.")
         sys.exit(1)
 
