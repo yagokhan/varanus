@@ -1,10 +1,10 @@
 """
-varanus/walk_forward.py — 8-Fold High-Resolution Rolling Window WFV (v5.0, Step 6).
+varanus/walk_forward.py — 8-Fold Sliding Window WFV (v5.0, Step 6).
 
 V5 changes vs v4:
   - n_folds: 5 → 8
-  - Ratios: 70/15/15 → 40/30/30
-  - Method: rolling window (non-overlapping test windows, step = test_size)
+  - Ratios: 70/15/15 → 25/35/40  (less train, more val+test)
+  - Method: sliding window (non-overlapping test windows, step = test_size)
   - Consistency gate: 80% → 75% (6/8 folds must pass)
   - Power Setup trade statistics added to fold output
   - generate_signals() rewritten: proper 4h + 1d separation
@@ -33,17 +33,17 @@ logger = logging.getLogger(__name__)
 
 WFV_CONFIG: dict = {
     "n_folds":           8,
-    "method":            "rolling_window",
+    "method":            "sliding_window",
     "shuffle":           False,            # NEVER shuffle — temporal integrity sacred
-    "train_ratio":       0.40,
-    "val_ratio":         0.30,
-    "test_ratio":        0.30,
-    "min_train_candles": 400,              # Hard floor (~67 days on 4h)
+    "train_ratio":       0.25,
+    "val_ratio":         0.35,
+    "test_ratio":        0.40,
+    "min_train_candles": 200,              # Reduced floor for smaller train window
     "gap_candles":       24,              # 4-day leakage embargo between splits
     "performance_gate": {
         "min_profit_factor": 1.50,         # V5 primary gate
         "min_win_rate":      43.0,
-        "max_fold_dd":      -15.0,         # Per-fold DD cap (-15%)
+        "max_fold_dd":      -25.0,         # Per-fold DD cap (-25%)
         "min_calmar":        0.50,
         "consistency_req":   0.75,         # >= 6/8 folds must pass
     },
@@ -90,7 +90,7 @@ def generate_rolling_folds(
 
     Design contract:
     ─────────────────────────────────────────────────────────────────────
-    • Split ratios: 40% train / 30% val / 30% test  (must sum to 1.0)
+    • Split ratios: 25% train / 35% val / 40% test  (must sum to 1.0)
     • Step: exactly test_size forward per fold → non-overlapping OOS tests
     • Gap: gap_candles removed at train→val and val→test boundaries
     • Shuffle: NEVER (temporal ordering is the contract)

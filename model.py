@@ -2,7 +2,7 @@
 varanus/model.py — XGBoost Model + V5 Leverage Logic (Step 4).
 
 V5 changes vs v4:
-  - Leverage map: fourth tier added (confidence >= 0.95 → 5x Power Setup)
+  - Leverage map: fourth tier added (confidence >= 0.95 → 3x Power Setup, capped)
   - confidence_threshold: resolved from params at predict time (not hardcoded)
   - is_power_setup(): new helper for backtest/risk layer
   - build_features() removed — imported from pa_features (no duplication)
@@ -39,7 +39,7 @@ CONFIDENCE_LEVERAGE_MAP_V5: dict = {
     (0.750, 0.850): 1.0,   # Base signal
     (0.850, 0.920): 2.0,   # Standard conviction
     (0.920, 0.950): 3.0,   # High conviction
-    (0.950, 1.001): 5.0,   # Power Setup — v5 only
+    (0.950, 1.001): 3.0,   # Power Setup — capped at 3x (was 5x)
 }
 
 # ── Model config ──────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ def get_leverage(confidence: float) -> float:
       [0.750, 0.850) → 1x   Base
       [0.850, 0.920) → 2x   Standard conviction
       [0.920, 0.950) → 3x   High conviction
-      [0.950, 1.001) → 5x   Power Setup (v5 new)
+      [0.950, 1.001) → 3x   Power Setup (capped from 5x)
 
     Returns 1.0 as safe default for any confidence below 0.750.
     """

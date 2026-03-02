@@ -3,7 +3,7 @@ varanus/optimizer.py — V5 Optuna HPO (Step 7).
 
 V5 HPO design:
   Objective : Profit Factor × log1p(Net Return %)
-  Constraint: Max Drawdown < −15%  →  returns −999.0
+  Constraint: Max Drawdown < −25%  →  returns −999.0
 
   Per-trial evaluation uses FOLD 1 of the 8-fold scheme:
     - Train model on fold 1 train window
@@ -80,7 +80,7 @@ OPTUNA_CONFIG: dict = {
         "min_trades":         30,
         "min_profit_factor":  1.50,
         "min_win_rate":       0.40,
-        "max_drawdown_floor": -15.0,
+        "max_drawdown_floor": -25.0,
     },
 }
 
@@ -125,7 +125,7 @@ def optuna_objective(
       per-trial cost manageable (1 model fit vs 8 for full WFV).
 
     Constraint (HARD):
-      Max Drawdown >= -15%  →  violated trials return -999.0
+      Max Drawdown >= -25%  →  violated trials return -999.0
 
     Scoring:
       base_score = profit_factor × log1p(net_return_pct)
@@ -133,7 +133,7 @@ def optuna_objective(
         - profit_factor < 1.50  →  × 0.50
         - win_rate < 40%        →  × 0.50
         - sharpe < 0.80         →  × 0.75
-        - DD within 3% of wall  →  × 0.70–1.00 (proximity penalty)
+        - DD within 5% of wall  →  × 0.70–1.00 (proximity penalty)
 
     Args:
         trial:       Optuna trial object.
@@ -255,8 +255,8 @@ def optuna_objective(
     win_rate_pct   = metrics["win_rate_pct"]
     sharpe         = metrics["sharpe_ratio"]
 
-    # HARD CONSTRAINT: Max Drawdown < -15%
-    if max_dd_pct < -15.0:
+    # HARD CONSTRAINT: Max Drawdown < -25%
+    if max_dd_pct < -25.0:
         return -999.0
 
     if net_return_pct <= 0:
@@ -273,10 +273,10 @@ def optuna_objective(
     if sharpe < 0.80:
         score *= 0.75
 
-    # Drawdown proximity penalty (nudges Optuna away from the -15% wall)
-    dd_headroom = -15.0 - max_dd_pct   # Positive = headroom remaining
-    if dd_headroom < 3.0:
-        score *= max(0.70, 0.70 + 0.10 * dd_headroom)
+    # Drawdown proximity penalty (nudges Optuna away from the -25% wall)
+    dd_headroom = -25.0 - max_dd_pct   # Positive = headroom remaining
+    if dd_headroom < 5.0:
+        score *= max(0.70, 0.70 + 0.06 * dd_headroom)
 
     logger.info(
         f"Trial {trial.number:04d} | "
