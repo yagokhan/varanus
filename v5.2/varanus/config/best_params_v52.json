@@ -1,7 +1,6 @@
 {
-    "_comment": "Varanus v5.2 Dual-Engine — Short Hunter FROZEN (Trial #183), Long Runner defaults pending optimization",
+    "_comment": "Varanus v5.2 Dual-Engine \u2014 Short Hunter FROZEN (Trial #183), Long Runner optimized",
     "_version": "5.2.0",
-
     "mss_lookback": 31,
     "fvg_min_atr_ratio": 0.392,
     "sweep_min_pct": 0.00641,
@@ -14,15 +13,13 @@
     "xgb_subsample": 0.957,
     "xgb_lr": 0.060884936946609944,
     "xgb_max_depth": 6,
-
-    "_short_hunter_frozen": "Trial #183 — DO NOT MODIFY",
-    "conf_thresh_short": 0.7860572350348888,
-    "tp_atr_mult": 5.768387250199972,
-    "sl_atr_mult": 0.7091859094186275,
-    "leverage_5x_trigger": 0.9676966378615275,
-
-    "_long_runner": "Defaults — replace after run_dual_engine_optimization()",
-    "conf_thresh_long": 0.760,
-    "tp_mult_long": 3.5,
-    "sl_mult_long": 0.80
+    "conf_thresh_short": 0.786,
+    "tp_atr_mult": 5.768,
+    "sl_atr_mult": 0.709,
+    "leverage_5x_trigger": 0.968,
+    "conf_thresh_long": 0.7728009346297515,
+    "tp_mult_long": 2.84762046355335,
+    "sl_mult_long": 0.8821788441272111,
+    "_short_hunter_frozen": "Trial #183 \u2014 DO NOT MODIFY",
+    "_long_runner": "Optimized Trial #87"
 }
