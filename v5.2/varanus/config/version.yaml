@@ -1,0 +1,80 @@
+version:      "5.2.0"
+codename:     "Dual-Engine"
+parent:       "5.1.0 (The Hunter)"
+strategy:     "Asymmetric Dual-Engine — Short Hunter + Long Runner"
+tier:         2
+asset_class:  "Mid-Cap Crypto (ex-BTC/ETH)"
+author:       "Varanus / Chameleon Project"
+last_updated: "2026-03-06"
+status:       "Specification — Ready for Long Runner Optimization"
+
+optimization:
+  v51_short_hunter:
+    best_trial:           183
+    best_hunter_eff:      "~74,000"
+    n_trials:             300
+    sampler:              "TPESampler"
+    pruner:               "HyperbandPruner"
+    params_file:          "config/best_params_v51.json"
+    status:               "FROZEN — DO NOT MODIFY"
+  v52_long_runner:
+    best_trial:           null
+    best_long_runner_score: null
+    n_trials:             300
+    sampler:              "TPESampler"
+    pruner:               "HyperbandPruner"
+    params_file:          "config/best_params_v52.json"
+    status:               "Pending optimization"
+
+frozen_short_params:
+  conf_thresh_short:   0.786
+  tp_atr_mult:         5.768
+  sl_atr_mult:         0.709
+  leverage_5x_trigger: 0.968
+
+long_runner_search_space:
+  conf_thresh_long: [0.680, 0.850]
+  tp_mult_long:     [2.5,   4.5]
+  sl_mult_long:     [0.60,  1.00]
+
+v51_walk_forward_results:
+  folds:              5
+  consistency:        "100% (5/5)"
+  hunter_eff_mean:    "74,507"
+  win_rate_pct:       36.5
+  long_win_rate_pct:  "TBD (Long Runner not yet optimized)"
+  short_win_rate_pct: "TBD (directional split not yet computed)"
+  max_drawdown:       -9.09
+
+v52_features:
+  total_features:     17
+  new_feature:        "bias_bypass_long"
+  bypass_condition:   "RSI_1D < 35 OR price in bottom 10% of 100-day range"
+  bypass_effect:      "Neutralise bearish HTF bias → allows long setup detection"
+
+validation_gates:
+  step5_backtest:  "PASS (v5.1 baseline)"
+  step6_wfv:       "PASS (v5.1 baseline)"
+  step7_long_opt:  "PENDING"
+  step8_risk:      "PASS (unchanged)"
+  step9_alerts:    "PASS (unchanged)"
+
+telegram:
+  bot:     "Varanusv51Bot"
+  env_var: "VARANUS_BOT_TOKEN / VARANUS_CHAT_ID"
+
+changelog:
+  - "5.2.0: Dual-Engine architecture. Short Hunter params FROZEN from Trial #183.
+             Long Runner module added: conf_thresh_long [0.68-0.85], tp_mult_long
+             [2.5-4.5], sl_mult_long [0.60-1.0]. HTF Bias Bypass: RSI_1D < 35 OR
+             price in bottom 10% of 100-day range neutralises bearish 1D MSS
+             filter for long entries (mean-reversion catch). Directional metrics
+             added to compute_metrics (long/short trade count, WR, net PnL%,
+             Sharpe). Long Runner Optuna objective: WR% x Sharpe (composite),
+             hard gate WR >= 38%. 17 features (bias_bypass_long added). Primary
+             reporting shifted to % returns + Hunter Efficiency ratio."
+  - "5.1.0: 5-fold 40/30/30 rolling WFV. Hunter Efficiency objective. 5x leverage
+             tier. Signal Decay, Dynamic Breakeven, MSS Invalidation exits.
+             300 Optuna trials, best Trial #183."
+  - "4.0.0: Initial Tier 2 specialization. MSS/FVG/Sweep signal core. Calmar
+             Ratio Optuna objective. Flash-wick guard."
