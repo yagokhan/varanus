@@ -16,9 +16,10 @@ import json
 
 from varanus.walk_forward import WFV_CONFIG_V51, _generate_folds_v51, _slice
 from varanus.backtest import run_backtest, compute_metrics, V52_SHORT_FROZEN_PARAMS
-from varanus.model import VaranusModel, MODEL_CONFIG
+from varanus.model import VaranusModel, VaranusDualModel, MODEL_CONFIG
 from varanus.pa_features import build_features, compute_atr
-from varanus.tbm_labeler import label_trades, TBM_CONFIG
+from varanus.tbm_labeler import label_trades, TBM_CONFIG, build_dual_labels
+import pandas as pd
 
 HUNTER_OPTUNA_CONFIG = {
     "n_trials":              300,
@@ -52,9 +53,9 @@ DUAL_ENGINE_OPTUNA_CONFIG = {
     "direction":               "maximize",
     "sampler":                 "TPESampler",
     "pruner":                  "HyperbandPruner",
-    "min_long_trades_per_fold": 5,    # Long Runner needs at least 5 longs per fold
-    "min_total_long_trades":    20,   # Total long trades across all folds
-    "min_long_win_rate":        0.38, # Hard floor: 38% long win rate to pass
+    "min_long_trades_per_fold": 3,    # Per fold minimum (relaxed for sparse long signals)
+    "min_total_long_trades":    12,   # Total long trades across all folds
+    "min_long_win_rate":        0.35, # Hard floor: 35% long win rate to avoid noise
     "dd_penalty_threshold":     0.12,
     "dd_penalty_multiplier":    0.40,
 }
@@ -272,6 +273,9 @@ def run_hunter_optimization(
     return study
 
 
+# build_dual_labels lives in tbm_labeler to avoid circular imports
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # v5.2 Dual-Engine: Long Runner Optimizer
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -336,26 +340,30 @@ def optuna_objective_dual_engine(
             test_4h  = _slice(df_dict_4h, test_idx)
             test_1d  = _slice(df_dict_1d, test_idx)
 
-            X_tr_list, y_tr_list = [], []
-            X_vl_list, y_vl_list = [], []
+            X_tr_list,  y_tr_list  = [], []
+            X_vl_list,  y_vl_list  = [], []
+            y_short_tr_list, y_short_vl_list = [], []
 
             for asset in train_4h:
                 if asset not in train_1d: continue
                 X = build_features(train_4h[asset], train_1d[asset], asset, params)
                 if X.empty: continue
-                y = label_trades(train_4h[asset].loc[X.index], X['mss_signal'],
-                                 TBM_CONFIG, asset, params)
+                y = build_dual_labels(train_4h[asset], X, {**params, '_asset': asset})
                 y = y.reindex(X.index).fillna(0).astype(int)
-                X_tr_list.append(X); y_tr_list.append(y)
+                # v5.1-style short labels: label_trades(mss_signal) preserves full count
+                y_short = label_trades(train_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+                y_short = y_short.reindex(X.index).fillna(0).astype(int)
+                X_tr_list.append(X); y_tr_list.append(y); y_short_tr_list.append(y_short)
 
             for asset in val_4h:
                 if asset not in val_1d: continue
                 X = build_features(val_4h[asset], val_1d[asset], asset, params)
                 if X.empty: continue
-                y = label_trades(val_4h[asset].loc[X.index], X['mss_signal'],
-                                 TBM_CONFIG, asset, params)
+                y = build_dual_labels(val_4h[asset], X, {**params, '_asset': asset})
                 y = y.reindex(X.index).fillna(0).astype(int)
-                X_vl_list.append(X); y_vl_list.append(y)
+                y_short = label_trades(val_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+                y_short = y_short.reindex(X.index).fillna(0).astype(int)
+                X_vl_list.append(X); y_vl_list.append(y); y_short_vl_list.append(y_short)
 
             if not X_tr_list:
                 continue
@@ -368,11 +376,13 @@ def optuna_objective_dual_engine(
                 'n_estimators':  params['xgb_n_estimators'],
                 'subsample':     params['xgb_subsample'],
             }
-            model = VaranusModel(model_cfg)
+            model = VaranusDualModel(model_cfg)
             model.fit(
                 pd.concat(X_tr_list), pd.concat(y_tr_list),
                 pd.concat(X_vl_list) if X_vl_list else None,
                 pd.concat(y_vl_list) if y_vl_list else None,
+                pd.concat(y_short_tr_list),
+                pd.concat(y_short_vl_list) if y_short_vl_list else None,
             )
 
             signals = {}
