@@ -1,0 +1,482 @@
+"""
+varanus/optimizer.py — Optuna Hyperparameter Search
+Varanus v5.2 Dual-Engine.
+
+Two objective modes:
+  1. optuna_objective_hunter     — v5.1 Hunter (legacy, full param search)
+  2. optuna_objective_dual_engine — v5.2 Long Runner only
+       - Short Hunter params FROZEN from Trial #183
+       - Searches: conf_thresh_long, tp_mult_long, sl_mult_long
+       - Objective: composite Long Runner Score (Win Rate × Sharpe)
+"""
+import optuna
+import pandas as pd
+import numpy as np
+import json
+
+from varanus.walk_forward import WFV_CONFIG_V51, _generate_folds_v51, _slice
+from varanus.backtest import run_backtest, compute_metrics, V52_SHORT_FROZEN_PARAMS
+from varanus.model import VaranusModel, MODEL_CONFIG
+from varanus.pa_features import build_features, compute_atr
+from varanus.tbm_labeler import label_trades, TBM_CONFIG
+
+HUNTER_OPTUNA_CONFIG = {
+    "n_trials":              300,
+    "direction":             "maximize",
+    "sampler":               "TPESampler",
+    "pruner":                "HyperbandPruner",
+    "min_trades_per_fold":   8,
+    "min_total_trades":      30,
+    "dd_penalty_threshold":  0.12,   # Folds breaching -12% DD get penalised
+    "dd_penalty_multiplier": 0.40,
+}
+
+# v4 frozen params — not searched by Optuna, loaded from best_params.json
+V4_FROZEN_PARAMS = {
+    "mss_lookback":      31,
+    "fvg_min_atr_ratio": 0.392,
+    "sweep_min_pct":     0.00641,
+    "fvg_max_age":       22,
+    "rvol_threshold":    1.287,
+    "rsi_oversold":      36,
+    "rsi_overbought":    58,
+    "max_holding":       31,
+    "xgb_n_estimators":  218,
+    "xgb_subsample":     0.957,
+}
+
+# ── v5.2 Dual-Engine config ────────────────────────────────────────────────────
+
+DUAL_ENGINE_OPTUNA_CONFIG = {
+    "n_trials":                300,
+    "direction":               "maximize",
+    "sampler":                 "TPESampler",
+    "pruner":                  "HyperbandPruner",
+    "min_long_trades_per_fold": 5,    # Long Runner needs at least 5 longs per fold
+    "min_total_long_trades":    20,   # Total long trades across all folds
+    "min_long_win_rate":        0.38, # Hard floor: 38% long win rate to pass
+    "dd_penalty_threshold":     0.12,
+    "dd_penalty_multiplier":    0.40,
+}
+
+# Long Runner search space (v5.2)
+LONG_RUNNER_SEARCH_SPACE = {
+    "conf_thresh_long": (0.680, 0.850),  # Higher frequency than short
+    "tp_mult_long":     (2.5,   4.5),    # Smaller, "step-like" targets
+    "sl_mult_long":     (0.60,  1.00),   # Protective stop for reversals
+}
+
+
+def _hunter_efficiency(net_profit_usd: float, max_dd_pct: float) -> float:
+    """Hunter Efficiency = Net Profit / |Max Drawdown|. Returns 0 if no drawdown."""
+    return net_profit_usd / abs(max_dd_pct) if max_dd_pct != 0 else 0.0
+
+
+def optuna_objective_hunter(
+    trial: optuna.Trial,
+    df_dict_4h: dict[str, pd.DataFrame],
+    df_dict_1d: dict[str, pd.DataFrame],
+    cfg: dict = WFV_CONFIG_V51,
+) -> float:
+    """
+    Hunter Efficiency Optuna Objective for Varanus v5.1.
+
+    Searches 6 Hunter parameters across 8-fold rolling walk-forward.
+    Reports per-fold intermediate scores so HyperbandPruner can prune early.
+    Applies 0.40x penalty on any fold where MaxDD exceeds -12%.
+
+    Search Space (6 Hunter Parameters)
+    -----------------------------------
+    1. confidence_thresh   — entry gate          [0.750 – 0.880]
+    2. sl_atr_mult         — stop loss ATR mult  [0.700 – 1.200]
+    3. tp_atr_mult         — take profit ATR mult [3.500 – 6.000]
+    4. leverage_5x_trigger — 5x lev gate         [0.930 – 0.980]
+    5. xgb_lr              — XGBoost learn rate  [0.005 – 0.080]
+    6. xgb_max_depth       — XGBoost tree depth  [3 – 6]
+    """
+    params = {
+        # 1. Entry Gate
+        "confidence_thresh":   trial.suggest_float("confidence_thresh",   0.750, 0.880),
+        # 2. Stop Loss
+        "sl_atr_mult":         trial.suggest_float("sl_atr_mult",         0.700, 1.200),
+        # 3. Take Profit
+        "tp_atr_mult":         trial.suggest_float("tp_atr_mult",         3.500, 6.000),
+        # 4. 5x Leverage Trigger
+        "leverage_5x_trigger": trial.suggest_float("leverage_5x_trigger", 0.930, 0.980),
+        # 5 & 6. XGBoost — tuned for 40% train windows
+        "xgb_lr":              trial.suggest_float("xgb_lr",              0.005, 0.080, log=True),
+        "xgb_max_depth":       trial.suggest_int("xgb_max_depth",         3,     6),
+        # Frozen v4 params
+        **V4_FROZEN_PARAMS,
+    }
+
+    print(f"\n>>> Hunter Trial {trial.number} | "
+          f"conf={params['confidence_thresh']:.3f} "
+          f"sl={params['sl_atr_mult']:.2f}x "
+          f"tp={params['tp_atr_mult']:.2f}x "
+          f"5xlev@{params['leverage_5x_trigger']:.3f} "
+          f"lr={params['xgb_lr']:.4f} "
+          f"depth={params['xgb_max_depth']}")
+
+    try:
+        folds = _generate_folds_v51(df_dict_4h, cfg)
+        if not folds:
+            return -999.0
+
+        fold_scores     = []
+        total_trades    = 0
+        penalty_applied = False
+
+        for fold_idx, (train_idx, val_idx, test_idx) in enumerate(folds):
+            train_4h = _slice(df_dict_4h, train_idx)
+            train_1d = _slice(df_dict_1d, train_idx)
+            val_4h   = _slice(df_dict_4h, val_idx)
+            val_1d   = _slice(df_dict_1d, val_idx)
+            test_4h  = _slice(df_dict_4h, test_idx)
+            test_1d  = _slice(df_dict_1d, test_idx)
+
+            X_tr_list, y_tr_list = [], []
+            X_vl_list, y_vl_list = [], []
+
+            for asset in train_4h:
+                if asset not in train_1d: continue
+                X = build_features(train_4h[asset], train_1d[asset], asset, params)
+                if X.empty: continue
+                y = label_trades(train_4h[asset].loc[X.index], X['mss_signal'],
+                                 TBM_CONFIG, asset, params)
+                y = y.reindex(X.index).fillna(0).astype(int)
+                X_tr_list.append(X)
+                y_tr_list.append(y)
+
+            for asset in val_4h:
+                if asset not in val_1d: continue
+                X = build_features(val_4h[asset], val_1d[asset], asset, params)
+                if X.empty: continue
+                y = label_trades(val_4h[asset].loc[X.index], X['mss_signal'],
+                                 TBM_CONFIG, asset, params)
+                y = y.reindex(X.index).fillna(0).astype(int)
+                X_vl_list.append(X)
+                y_vl_list.append(y)
+
+            if not X_tr_list:
+                continue
+
+            # Re-tune XGBoost params for this trial's depth/lr
+            model_cfg = {**MODEL_CONFIG}
+            model_cfg['xgb_params'] = {
+                **MODEL_CONFIG['xgb_params'],
+                'max_depth':     params['xgb_max_depth'],
+                'learning_rate': params['xgb_lr'],
+                'n_estimators':  params['xgb_n_estimators'],
+                'subsample':     params['xgb_subsample'],
+            }
+            model = VaranusModel(model_cfg)
+            model.fit(
+                pd.concat(X_tr_list), pd.concat(y_tr_list),
+                pd.concat(X_vl_list) if X_vl_list else None,
+                pd.concat(y_vl_list) if y_vl_list else None,
+            )
+
+            signals = {}
+            for asset, df_4h in test_4h.items():
+                if asset not in test_1d: continue
+                X_t = build_features(df_4h, test_1d[asset], asset, params)
+                if X_t.empty: continue
+                probs  = model.predict_proba(X_t)
+                preds  = model.predict(X_t)
+                sig_df = pd.DataFrame(index=X_t.index)
+                sig_df['confidence']  = probs.max(axis=1)
+                sig_df['direction']   = preds
+                sig_df['entry_price'] = df_4h.loc[X_t.index, 'close']
+                sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14)
+                sig_df = sig_df[sig_df['direction'] != 0]
+                if not sig_df.empty:
+                    signals[asset] = sig_df
+
+            if not signals:
+                continue
+
+            equity, trades = run_backtest(test_4h, signals, model, params)
+            metrics        = compute_metrics(equity, trades)
+
+            fold_trades = metrics['total_trades']
+            fold_dd     = metrics['max_drawdown_pct'] / 100.0
+            net_profit  = trades['pnl_usd'].sum() if not trades.empty else 0.0
+
+            if fold_trades < HUNTER_OPTUNA_CONFIG['min_trades_per_fold']:
+                continue
+
+            fold_he = _hunter_efficiency(net_profit, fold_dd)
+
+            # Hard DD penalty
+            if abs(fold_dd) > HUNTER_OPTUNA_CONFIG['dd_penalty_threshold']:
+                fold_he *= HUNTER_OPTUNA_CONFIG['dd_penalty_multiplier']
+                penalty_applied = True
+
+            fold_scores.append(fold_he)
+            total_trades += fold_trades
+
+            # Report intermediate value for HyperbandPruner
+            trial.report(float(np.mean(fold_scores)), step=fold_idx)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
+        if total_trades < HUNTER_OPTUNA_CONFIG['min_total_trades']:
+            print(f"  -> Penalty: only {total_trades} total trades.")
+            return -999.0
+
+        if not fold_scores:
+            return -999.0
+
+        mean_he = float(np.mean(fold_scores))
+        flag    = " [DD PENALTY]" if penalty_applied else ""
+        print(f"  -> Trial {trial.number} | Hunter Efficiency: {mean_he:.3f} | "
+              f"Folds scored: {len(fold_scores)}/{len(folds)} | Trades: {total_trades}{flag}")
+        return mean_he
+
+    except optuna.TrialPruned:
+        raise
+    except Exception as exc:
+        print(f"  -> Trial {trial.number} failed: {exc}")
+        return -999.0
+
+
+def run_hunter_optimization(
+    df_dict_4h: dict[str, pd.DataFrame],
+    df_dict_1d: dict[str, pd.DataFrame],
+    n_trials: int = 300,
+    study_name: str = "varanus_v51_hunter",
+) -> optuna.Study:
+    """
+    Launch the Hunter Efficiency Optuna study (v5.1 legacy).
+
+    Usage
+    -----
+    study = run_hunter_optimization(data_4h, data_1d, n_trials=300)
+    print(f"Best Hunter Efficiency: {study.best_value:.3f}")
+    print(f"Best params: {study.best_params}")
+    """
+    study = optuna.create_study(
+        study_name = study_name,
+        direction  = "maximize",
+        sampler    = optuna.samplers.TPESampler(seed=42),
+        pruner     = optuna.pruners.HyperbandPruner(
+            min_resource=2, max_resource=8, reduction_factor=3
+        ),
+    )
+    study.optimize(
+        lambda t: optuna_objective_hunter(t, df_dict_4h, df_dict_1d),
+        n_trials          = n_trials,
+        show_progress_bar = True,
+    )
+    return study
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# v5.2 Dual-Engine: Long Runner Optimizer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def optuna_objective_dual_engine(
+    trial: optuna.Trial,
+    df_dict_4h: dict[str, pd.DataFrame],
+    df_dict_1d: dict[str, pd.DataFrame],
+    cfg: dict = WFV_CONFIG_V51,
+) -> float:
+    """
+    v5.2 Dual-Engine Optuna Objective — Long Runner Only.
+
+    Short Hunter parameters are FROZEN from Trial #183:
+      conf_thresh_short=0.786, tp_atr_mult=5.768, sl_atr_mult=0.709,
+      leverage_5x_trigger=0.968
+
+    Searches 3 Long Runner parameters:
+      conf_thresh_long  [0.680 - 0.850]  — higher frequency entry gate
+      tp_mult_long      [2.5   - 4.5]    — smaller step-like targets
+      sl_mult_long      [0.60  - 1.00]   — protective reversal stop
+
+    Objective: Long Runner Score = long_win_rate_pct × max(long_sharpe, 0)
+    Hard constraint: long_win_rate < 38% → return -999.0
+    """
+    sp = LONG_RUNNER_SEARCH_SPACE
+    long_params = {
+        "conf_thresh_long": trial.suggest_float("conf_thresh_long", *sp["conf_thresh_long"]),
+        "tp_mult_long":     trial.suggest_float("tp_mult_long",     *sp["tp_mult_long"]),
+        "sl_mult_long":     trial.suggest_float("sl_mult_long",     *sp["sl_mult_long"]),
+    }
+
+    # Full parameter set: Long Runner + frozen Short Hunter + frozen v4 signal core
+    params = {
+        **V4_FROZEN_PARAMS,
+        **V52_SHORT_FROZEN_PARAMS,
+        **long_params,
+        # XGBoost — v5.1 best values, not re-searched
+        "xgb_lr":        0.0609,
+        "xgb_max_depth": 6,
+    }
+
+    print(f"\n>>> DualEngine Trial {trial.number} | "
+          f"conf_long={params['conf_thresh_long']:.3f} "
+          f"tp_long={params['tp_mult_long']:.2f}x "
+          f"sl_long={params['sl_mult_long']:.2f}x")
+
+    try:
+        folds = _generate_folds_v51(df_dict_4h, cfg)
+        if not folds:
+            return -999.0
+
+        fold_scores  = []
+        total_long   = 0
+        penalty_flag = False
+
+        for fold_idx, (train_idx, val_idx, test_idx) in enumerate(folds):
+            train_4h = _slice(df_dict_4h, train_idx)
+            train_1d = _slice(df_dict_1d, train_idx)
+            val_4h   = _slice(df_dict_4h, val_idx)
+            val_1d   = _slice(df_dict_1d, val_idx)
+            test_4h  = _slice(df_dict_4h, test_idx)
+            test_1d  = _slice(df_dict_1d, test_idx)
+
+            X_tr_list, y_tr_list = [], []
+            X_vl_list, y_vl_list = [], []
+
+            for asset in train_4h:
+                if asset not in train_1d: continue
+                X = build_features(train_4h[asset], train_1d[asset], asset, params)
+                if X.empty: continue
+                y = label_trades(train_4h[asset].loc[X.index], X['mss_signal'],
+                                 TBM_CONFIG, asset, params)
+                y = y.reindex(X.index).fillna(0).astype(int)
+                X_tr_list.append(X); y_tr_list.append(y)
+
+            for asset in val_4h:
+                if asset not in val_1d: continue
+                X = build_features(val_4h[asset], val_1d[asset], asset, params)
+                if X.empty: continue
+                y = label_trades(val_4h[asset].loc[X.index], X['mss_signal'],
+                                 TBM_CONFIG, asset, params)
+                y = y.reindex(X.index).fillna(0).astype(int)
+                X_vl_list.append(X); y_vl_list.append(y)
+
+            if not X_tr_list:
+                continue
+
+            model_cfg = {**MODEL_CONFIG}
+            model_cfg['xgb_params'] = {
+                **MODEL_CONFIG['xgb_params'],
+                'max_depth':     params['xgb_max_depth'],
+                'learning_rate': params['xgb_lr'],
+                'n_estimators':  params['xgb_n_estimators'],
+                'subsample':     params['xgb_subsample'],
+            }
+            model = VaranusModel(model_cfg)
+            model.fit(
+                pd.concat(X_tr_list), pd.concat(y_tr_list),
+                pd.concat(X_vl_list) if X_vl_list else None,
+                pd.concat(y_vl_list) if y_vl_list else None,
+            )
+
+            signals = {}
+            for asset, df_4h in test_4h.items():
+                if asset not in test_1d: continue
+                X_t = build_features(df_4h, test_1d[asset], asset, params)
+                if X_t.empty: continue
+                probs  = model.predict_proba(X_t)
+                preds  = model.predict(X_t)
+                sig_df = pd.DataFrame(index=X_t.index)
+                sig_df['confidence']  = probs.max(axis=1)
+                sig_df['direction']   = preds
+                sig_df['entry_price'] = df_4h.loc[X_t.index, 'close']
+                sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14)
+                sig_df = sig_df[sig_df['direction'] != 0]
+                if not sig_df.empty:
+                    signals[asset] = sig_df
+
+            if not signals:
+                continue
+
+            equity, trades = run_backtest(test_4h, signals, model, params)
+            metrics        = compute_metrics(equity, trades)
+
+            fold_long   = metrics.get('long_trades', 0)
+            fold_lwr    = metrics.get('long_win_rate_pct', 0.0) / 100.0
+            fold_lsharpe = metrics.get('long_sharpe', 0.0)
+            fold_dd     = metrics.get('max_drawdown_pct', 0.0) / 100.0
+
+            if fold_long < DUAL_ENGINE_OPTUNA_CONFIG['min_long_trades_per_fold']:
+                continue
+
+            # Hard win rate gate — penalise underperforming long configs
+            if fold_lwr < DUAL_ENGINE_OPTUNA_CONFIG['min_long_win_rate']:
+                fold_scores.append(-10.0)
+                total_long += fold_long
+                trial.report(-10.0, step=fold_idx)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+                continue
+
+            # Long Runner Score = win_rate × max(sharpe, 0)
+            fold_score = fold_lwr * 100.0 * max(fold_lsharpe, 0.0)
+
+            # Portfolio-level DD penalty (same threshold as Hunter)
+            if abs(fold_dd) > DUAL_ENGINE_OPTUNA_CONFIG['dd_penalty_threshold']:
+                fold_score *= DUAL_ENGINE_OPTUNA_CONFIG['dd_penalty_multiplier']
+                penalty_flag = True
+
+            fold_scores.append(fold_score)
+            total_long  += fold_long
+
+            trial.report(float(np.mean(fold_scores)), step=fold_idx)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
+        if total_long < DUAL_ENGINE_OPTUNA_CONFIG['min_total_long_trades']:
+            print(f"  -> Penalty: only {total_long} long trades total.")
+            return -999.0
+        if not fold_scores:
+            return -999.0
+
+        mean_score = float(np.mean(fold_scores))
+        flag = " [DD PENALTY]" if penalty_flag else ""
+        print(f"  -> Trial {trial.number} | LongRunner Score: {mean_score:.3f} | "
+              f"Folds: {len(fold_scores)}/{len(folds)} | LongTrades: {total_long}{flag}")
+        return mean_score
+
+    except optuna.TrialPruned:
+        raise
+    except Exception as exc:
+        print(f"  -> Trial {trial.number} failed: {exc}")
+        return -999.0
+
+
+def run_dual_engine_optimization(
+    df_dict_4h: dict[str, pd.DataFrame],
+    df_dict_1d: dict[str, pd.DataFrame],
+    n_trials: int = 300,
+    study_name: str = "varanus_v52_dual_engine",
+) -> optuna.Study:
+    """
+    Launch the v5.2 Dual-Engine Long Runner Optuna study.
+
+    Short Hunter params remain frozen (Trial #183).
+    Only 3 Long Runner parameters are searched.
+
+    Usage
+    -----
+    study = run_dual_engine_optimization(data_4h, data_1d, n_trials=300)
+    print(f"Best Long Runner Score: {study.best_value:.3f}")
+    print(f"Long Runner params: {study.best_params}")
+    """
+    study = optuna.create_study(
+        study_name = study_name,
+        direction  = "maximize",
+        sampler    = optuna.samplers.TPESampler(seed=52),
+        pruner     = optuna.pruners.HyperbandPruner(
+            min_resource=2, max_resource=8, reduction_factor=3
+        ),
+    )
+    study.optimize(
+        lambda t: optuna_objective_dual_engine(t, df_dict_4h, df_dict_1d),
+        n_trials          = n_trials,
+        show_progress_bar = True,
+    )
+    return study
