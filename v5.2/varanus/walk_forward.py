@@ -6,9 +6,9 @@ import pandas as pd
 import numpy as np
 from typing import List, Tuple
 
-from varanus.model import VaranusModel, MODEL_CONFIG
+from varanus.model import VaranusModel, VaranusDualModel, MODEL_CONFIG
 from varanus.pa_features import build_features, detect_mss, compute_atr
-from varanus.tbm_labeler import label_trades, TBM_CONFIG
+from varanus.tbm_labeler import label_trades, TBM_CONFIG, build_dual_labels
 from varanus.backtest import run_backtest, compute_metrics
 
 # v4 config — kept for reference only, not used in v5.1
@@ -230,16 +230,28 @@ def run_walk_forward(
         test_4h  = _slice(df_dict_4h, test_idx)
         test_1d  = _slice(df_dict_1d, test_idx)
 
-        # Build feature matrices for train and val
-        model = VaranusModel(MODEL_CONFIG)
-        X_tr_list, y_tr_list = [], []
-        X_vl_list, y_vl_list = [], []
+        # v5.2: use VaranusDualModel when Long Runner params are present.
+        # Each engine trains on its own labels — short model never sees long labels.
+        _dual = 'tp_mult_long' in params
+        model = VaranusDualModel(MODEL_CONFIG) if _dual else VaranusModel(MODEL_CONFIG)
+
+        X_tr_list,  y_tr_list  = [], []
+        X_vl_list,  y_vl_list  = [], []
+        # y_short_*: v5.1-style labels from label_trades(mss_signal) — preserves
+        # the full short label count. Only used when _dual=True.
+        y_short_tr_list, y_short_vl_list = [], []
 
         for asset in train_4h:
             if asset not in train_1d: continue
             X = build_features(train_4h[asset], train_1d[asset], asset, params)
             if X.empty: continue
-            y = label_trades(train_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+            if _dual:
+                y      = build_dual_labels(train_4h[asset], X, {**params, '_asset': asset})
+                y_short = label_trades(train_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+                y_short = y_short.reindex(X.index).fillna(0).astype(int)
+                y_short_tr_list.append(y_short)
+            else:
+                y = label_trades(train_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
             y = y.reindex(X.index).fillna(0).astype(int)
             X_tr_list.append(X)
             y_tr_list.append(y)
@@ -248,7 +260,13 @@ def run_walk_forward(
             if asset not in val_1d: continue
             X = build_features(val_4h[asset], val_1d[asset], asset, params)
             if X.empty: continue
-            y = label_trades(val_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+            if _dual:
+                y      = build_dual_labels(val_4h[asset], X, {**params, '_asset': asset})
+                y_short = label_trades(val_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
+                y_short = y_short.reindex(X.index).fillna(0).astype(int)
+                y_short_vl_list.append(y_short)
+            else:
+                y = label_trades(val_4h[asset].loc[X.index], X['mss_signal'], TBM_CONFIG, asset, params)
             y = y.reindex(X.index).fillna(0).astype(int)
             X_vl_list.append(X)
             y_vl_list.append(y)
@@ -261,6 +279,8 @@ def run_walk_forward(
             pd.concat(X_tr_list), pd.concat(y_tr_list),
             pd.concat(X_vl_list) if X_vl_list else None,
             pd.concat(y_vl_list) if y_vl_list else None,
+            pd.concat(y_short_tr_list) if y_short_tr_list else None,
+            pd.concat(y_short_vl_list) if y_short_vl_list else None,
         )
 
         # Generate signals and backtest on unseen test window
