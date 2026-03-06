@@ -619,11 +619,10 @@ def build_features(
         (price_range_pct < bbc["price_range_bottom_pct"])
     )
 
-    # Override: neutralise bearish HTF bias when bypass is active
-    # (allows long setups to surface even in macro downtrend)
-    htf_bias_eff = htf_bias.copy()
-    htf_bias_eff[bypass_active & (htf_bias == -1)] = 0
-    htf_bias = htf_bias_eff
+    # NOTE: htf_bias is NOT modified here. Keeping it as the raw 1D MSS direction
+    # ensures the short model sees the same feature distribution as v5.1.
+    # bias_bypass_long is passed as a separate feature so the long runner can learn
+    # to override bearish bias independently, without contaminating short training.
 
     # ── 2.2 FVG + sweep features ──────────────────────────────────────────────
     atr14   = _atr(df["high"], df["low"], df["close"], 14)
@@ -635,8 +634,8 @@ def build_features(
 
     # ── Assemble output ───────────────────────────────────────────────────────
     out = df.copy()
-    out["mss_signal"]      = mss
-    out["htf_bias"]        = htf_bias          # Effective bias (bypass already applied)
+    out["mss_signal"]       = mss
+    out["htf_bias"]         = htf_bias          # True 1D MSS direction, unmodified
     out["bias_bypass_long"] = bypass_active.astype(np.float32)
     out = out.join(fvg_bar)
     out = out.join(confirm)
