@@ -54,11 +54,10 @@ DUAL_ENGINE_OPTUNA_CONFIG = {
     "sampler":                 "TPESampler",
     "pruner":                  "HyperbandPruner",
     "min_long_trades_per_fold": 3,    # Per fold minimum (relaxed — OOS windows are ~14% of data)
-    "min_total_long_trades":    50,   # v5.2 Deep Search: hard density gate across all OOS windows
-                                      # Calibrated to model probability ceiling (~56 max observed).
-                                      # Trials producing < 50 long trades total → -999.0 penalty.
-                                      # Target range: 50–56. Gate raised to 60 in v5.2.1 after
+    "min_total_long_trades":    60,   # v5.2.2 Deep Search: gate restored to target after
                                       # training imbalance fix (scale_pos_weight on long arm).
+                                      # Trials producing < 60 long trades total → -999.0 penalty.
+                                      # Target range: 60–100.
     "min_long_win_rate":        0.35, # Hard floor: 35% long win rate to avoid noise
     "dd_penalty_threshold":     0.12,
     "dd_penalty_multiplier":    0.40,
