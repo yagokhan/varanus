@@ -53,18 +53,24 @@ DUAL_ENGINE_OPTUNA_CONFIG = {
     "direction":               "maximize",
     "sampler":                 "TPESampler",
     "pruner":                  "HyperbandPruner",
-    "min_long_trades_per_fold": 3,    # Per fold minimum (relaxed for sparse long signals)
-    "min_total_long_trades":    12,   # Total long trades across all folds
+    "min_long_trades_per_fold": 3,    # Per fold minimum (relaxed — OOS windows are ~14% of data)
+    "min_total_long_trades":    25,   # Total long trades across all folds
+                                      # Target 50–100 in full backtest; 25 in 14% OOS windows
     "min_long_win_rate":        0.35, # Hard floor: 35% long win rate to avoid noise
     "dd_penalty_threshold":     0.12,
     "dd_penalty_multiplier":    0.40,
 }
 
-# Long Runner search space (v5.2)
+# Long Runner search space (v5.2 Volume Injection)
+# SHORT HUNTER LOCK-DOWN: These ranges apply to direction==1 only.
 LONG_RUNNER_SEARCH_SPACE = {
-    "conf_thresh_long": (0.680, 0.850),  # Higher frequency than short
-    "tp_mult_long":     (2.5,   4.5),    # Smaller, "step-like" targets
-    "sl_mult_long":     (0.60,  1.00),   # Protective stop for reversals
+    "conf_thresh_long": (0.60, 0.75),   # v5.2 VI: lowered from (0.680, 0.850)
+                                         # Less "perfectionist" — catches reversals
+                                         # in neutral-to-bullish regimes.
+    "tp_mult_long":     (2.5,  4.5),    # Unchanged — step-like targets
+    "sl_mult_long":     (0.50, 1.20),   # v5.2 VI: widened from (0.60, 1.00)
+                                         # "Give the trade more room" — explores
+                                         # both tight and loose stops for longs.
 }
 
 
@@ -293,13 +299,14 @@ def optuna_objective_dual_engine(
       conf_thresh_short=0.786, tp_atr_mult=5.768, sl_atr_mult=0.709,
       leverage_5x_trigger=0.968
 
-    Searches 3 Long Runner parameters:
-      conf_thresh_long  [0.680 - 0.850]  — higher frequency entry gate
-      tp_mult_long      [2.5   - 4.5]    — smaller step-like targets
-      sl_mult_long      [0.60  - 1.00]   — protective reversal stop
+    Searches 3 Long Runner parameters (v5.2 Volume Injection search space):
+      conf_thresh_long  [0.60  - 0.75]   — lowered from 0.85 ceiling to increase frequency
+      tp_mult_long      [2.5   - 4.5]    — smaller step-like targets (unchanged)
+      sl_mult_long      [0.50  - 1.20]   — widened to explore looser stops for longs
 
     Objective: Long Runner Score = long_win_rate_pct × max(long_sharpe, 0)
     Hard constraint: long_win_rate < 38% → return -999.0
+    Signal density target: 50–100 long trades across all folds.
     """
     sp = LONG_RUNNER_SEARCH_SPACE
     long_params = {
@@ -386,20 +393,34 @@ def optuna_objective_dual_engine(
             )
 
             signals = {}
+            _conf_long  = params.get('conf_thresh_long',  0.70)
+            _conf_short = params.get('conf_thresh_short', 0.786)
             for asset, df_4h in test_4h.items():
                 if asset not in test_1d: continue
                 X_t = build_features(df_4h, test_1d[asset], asset, params)
                 if X_t.empty: continue
-                probs  = model.predict_proba(X_t)
-                preds  = model.predict(X_t)
-                sig_df = pd.DataFrame(index=X_t.index)
-                sig_df['confidence']  = probs.max(axis=1)
-                sig_df['direction']   = preds
-                sig_df['entry_price'] = df_4h.loc[X_t.index, 'close']
-                sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14)
-                sig_df = sig_df[sig_df['direction'] != 0]
-                if not sig_df.empty:
-                    signals[asset] = sig_df
+                probs   = model.predict_proba(X_t)       # (N, 3): [p_short, p_neutral, p_long]
+                p_short = probs[:, 0]
+                p_long  = probs[:, 2]
+                # Direction from direction-specific raw-proba thresholds — NOT model.predict().
+                # model.predict() has a hard 0.75 floor; using raw proba lets
+                # conf_thresh_long < 0.75 actually increase long signal count.
+                # SHORT HUNTER LOCK-DOWN: short gate stays at frozen conf_thresh_short=0.786.
+                direction = np.zeros(len(X_t), dtype=int)
+                long_mask  = (p_long  >= _conf_long)  & (p_long  > p_short)
+                short_mask = (p_short >= _conf_short) & (p_short >= p_long)
+                direction[long_mask]  =  1
+                direction[short_mask] = -1
+                active = direction != 0
+                if not active.any(): continue
+                idx_active = X_t.index[active]
+                sig_df = pd.DataFrame(index=idx_active)
+                sig_df['confidence']  = np.where(
+                    direction[active] == 1, p_long[active], p_short[active])
+                sig_df['direction']   = direction[active]
+                sig_df['entry_price'] = df_4h.loc[idx_active, 'close'].values
+                sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14).loc[idx_active].values
+                signals[asset] = sig_df
 
             if not signals:
                 continue
