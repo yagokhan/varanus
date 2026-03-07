@@ -17,9 +17,9 @@
     "tp_atr_mult": 5.768,
     "sl_atr_mult": 0.709,
     "leverage_5x_trigger": 0.968,
-    "conf_thresh_long": 0.7728009346297515,
-    "tp_mult_long": 2.84762046355335,
-    "sl_mult_long": 0.8821788441272111,
+    "conf_thresh_long": 0.7383751890313925,
+    "tp_mult_long": 2.710980364087774,
+    "sl_mult_long": 0.8594591897258925,
     "_short_hunter_frozen": "Trial #183 \u2014 DO NOT MODIFY",
-    "_long_runner": "Optimized Trial #87"
+    "_long_runner": "Optimized Trial #274"
 }
