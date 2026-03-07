@@ -285,20 +285,38 @@ def run_walk_forward(
 
         # Generate signals and backtest on unseen test window
         signals = {}
+        _dual       = 'tp_mult_long' in params
+        _conf_long  = params.get('conf_thresh_long',  0.70)
+        _conf_short = params.get('conf_thresh_short', 0.786)
         for asset, df_4h in test_4h.items():
             if asset not in test_1d: continue
             X_t = build_features(df_4h, test_1d[asset], asset, params)
             if X_t.empty: continue
-            probs  = model.predict_proba(X_t)
-            preds  = model.predict(X_t)
-            sig_df = pd.DataFrame(index=X_t.index)
-            sig_df['confidence']  = probs.max(axis=1)
-            sig_df['direction']   = preds
-            sig_df['entry_price'] = df_4h.loc[X_t.index, 'close']
-            sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14)
-            sig_df = sig_df[sig_df['direction'] != 0]
-            if not sig_df.empty:
-                signals[asset] = sig_df
+            probs = model.predict_proba(X_t)
+            if _dual:
+                # Dual engine: direction from raw proba with direction-specific thresholds.
+                # Bypasses the 0.75 hard floor in model.predict() so conf_thresh_long
+                # can meaningfully control long signal frequency below 0.75.
+                # SHORT HUNTER LOCK-DOWN: short gate stays at frozen conf_thresh_short.
+                p_short = probs[:, 0]
+                p_long  = probs[:, 2]
+                direction = np.zeros(len(X_t), dtype=int)
+                direction[(p_long  >= _conf_long)  & (p_long  > p_short)] =  1
+                direction[(p_short >= _conf_short) & (p_short >= p_long)] = -1
+                confidence = np.where(direction == 1, p_long, p_short)
+            else:
+                # v5.1 Hunter: use model.predict() as before
+                direction  = model.predict(X_t)
+                confidence = probs.max(axis=1)
+            active = direction != 0
+            if not active.any(): continue
+            idx_active = X_t.index[active]
+            sig_df = pd.DataFrame(index=idx_active)
+            sig_df['confidence']  = confidence[active]
+            sig_df['direction']   = direction[active]
+            sig_df['entry_price'] = df_4h.loc[idx_active, 'close'].values
+            sig_df['atr']         = compute_atr(df_4h.loc[X_t.index], 14).loc[idx_active].values
+            signals[asset] = sig_df
 
         if not signals:
             print("  No signals in OOS test window. Skipping.")
