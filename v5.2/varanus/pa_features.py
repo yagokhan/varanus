@@ -13,16 +13,24 @@ Market Character (per-bar, single-asset):
        volatility_rank, volume_rank, asset_tier_flag,
        hour_of_day, day_of_week
 
-v5.2 Addition:
+v5.2 Additions:
   2.4  Long Runner Bias Bypass             → bias_bypass_long
        Neutralises bearish HTF bias when the market is deeply oversold
-       (RSI_1D < 35 OR price in bottom 10% of its 100-day range).
+       (RSI_1D < 45 OR price in bottom 25% of its 100-day range).
+
+  2.5  SSL Sweep Long (v5.2 Volume Injection) → ssl_sweep_long
+       Detects Sell-Side Liquidity (SSL) sweeps with a 20% relaxed threshold
+       specifically for long entries. Does NOT affect short detection.
 
 Master entry point:
   build_features(df_4h, df_1d, asset, params=None) -> pd.DataFrame
 
 NOTE: detect_mss() uses a trailing rolling window, correct for both
       training/backtesting and live use.
+
+SHORT HUNTER LOCK-DOWN: No parameters, logic, or thresholds for short trades
+(direction == -1) may be modified. The v5.1 Short Hunter (Trial #183) is the
+Gold Standard baseline. All changes in this file are strictly long-side only.
 """
 
 from __future__ import annotations
@@ -49,12 +57,22 @@ MSS_CONFIG: dict = {
 }
 
 # ── v5.2 Bias Bypass config ────────────────────────────────────────────────────
+# SHORT HUNTER LOCK-DOWN: These settings apply to Long Runner (direction==1) only.
 
 BIAS_BYPASS_CONFIG: dict = {
-    "rsi_1d_threshold":       35,    # Daily RSI below this → bypass bearish HTF filter
-    "price_range_bottom_pct": 0.10,  # Price in bottom 10% of 100-day H-L range → bypass
+    "rsi_1d_threshold":       45,    # Daily RSI below this → bypass bearish HTF filter
+                                     # v5.2 Volume Injection: relaxed from 35 → 45
+                                     # Catches pullbacks in neutral-to-bullish regimes,
+                                     # not just extreme capitulation events.
+    "price_range_bottom_pct": 0.25,  # Price in bottom 25% of 100-day H-L range → bypass
+                                     # v5.2 Volume Injection: relaxed from 10% → 25%
+                                     # Allows dip-buying earlier in the correction.
     "range_lookback_4h":      600,   # 100 days × 6 4h bars per day
     "rsi_1d_min_periods":     10,    # Minimum 1D bars required to compute RSI
+    "ssl_sweep_mult_long":    0.80,  # SSL sweep threshold multiplier for Long entries only
+                                     # min_sweep_pct × 0.80 — 20% more sensitive to
+                                     # Sell-Side Liquidity sweeps for dip-buying.
+                                     # Does NOT affect bearish sweep detection.
 }
 
 # ── 2.2 FVG config ─────────────────────────────────────────────────────────────
@@ -123,6 +141,8 @@ FEATURE_COLS: list[str] = [
     "day_of_week",
     # v5.2 Long Runner Bias Bypass
     "bias_bypass_long",
+    # v5.2 Volume Injection — SSL sweep for long entries (relaxed threshold, long-side only)
+    "ssl_sweep_long",
 ]
 
 
@@ -544,6 +564,57 @@ def _compute_confirmation_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 2.5  SSL Sweep Long — Long-side only, relaxed threshold
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _compute_ssl_sweep_long(
+    df:           pd.DataFrame,
+    sweep_lookback: int,
+    min_sweep_pct: float,
+    sweep_mult:   float = 0.80,
+) -> pd.Series:
+    """
+    Per-bar feature: 1 if a bullish Sell-Side Liquidity (SSL) sweep occurred.
+
+    A bullish SSL sweep: bar's low pierces a prior swing low by >= threshold,
+    then closes ABOVE that low on the same bar (indicating reversal conviction).
+
+    Uses a relaxed threshold = min_sweep_pct × sweep_mult (default 0.80, i.e.
+    20% more sensitive than the standard FVG sweep filter).
+
+    LONG-SIDE ONLY — only detects downward sweeps. Bearish sweep detection
+    (for Short Hunter) is never modified by this function.
+
+    Args:
+        df:             OHLCV DataFrame (positional-indexed internally).
+        sweep_lookback: Number of bars to look back for a prior swing low.
+        min_sweep_pct:  Base sweep threshold from FVG_CONFIG (e.g. 0.00641).
+        sweep_mult:     Relaxation multiplier for long entries (default 0.80).
+
+    Returns:
+        pd.Series of float32 {0.0, 1.0} aligned to df.index.
+    """
+    threshold = min_sweep_pct * sweep_mult
+    n         = len(df)
+    result    = np.zeros(n, dtype=np.float32)
+
+    low_arr   = df["low"].values
+    close_arr = df["close"].values
+
+    for i in range(1, n):
+        start     = max(0, i - sweep_lookback)
+        prior_low = low_arr[start:i].min()
+        cur_low   = low_arr[i]
+        cur_close = close_arr[i]
+
+        # Bullish SSL sweep: dips below prior low by threshold, closes above it
+        if cur_low < prior_low * (1 - threshold) and cur_close > prior_low:
+            result[i] = 1.0
+
+    return pd.Series(result, index=df.index, dtype=np.float32)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Master builder
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -624,6 +695,17 @@ def build_features(
     # bias_bypass_long is passed as a separate feature so the long runner can learn
     # to override bearish bias independently, without contaminating short training.
 
+    # ── 2.5 SSL Sweep Long (Volume Injection — long-side only) ────────────────
+    # Uses min_sweep_pct × ssl_sweep_mult_long (20% relaxed) to detect more
+    # Sell-Side Liquidity sweeps for long bypass candidates.
+    # SHORT HUNTER LOCK-DOWN: only bullish sweeps computed here.
+    ssl_sweep_long = _compute_ssl_sweep_long(
+        df,
+        sweep_lookback = fvg_cfg["sweep_lookback"],
+        min_sweep_pct  = fvg_cfg["min_sweep_pct"],
+        sweep_mult     = bbc["ssl_sweep_mult_long"],
+    )
+
     # ── 2.2 FVG + sweep features ──────────────────────────────────────────────
     atr14   = _atr(df["high"], df["low"], df["close"], 14)
     fvg_df  = detect_fvg(df, atr14, fvg_cfg)
@@ -637,6 +719,7 @@ def build_features(
     out["mss_signal"]       = mss
     out["htf_bias"]         = htf_bias          # True 1D MSS direction, unmodified
     out["bias_bypass_long"] = bypass_active.astype(np.float32)
+    out["ssl_sweep_long"]   = ssl_sweep_long    # Long-only SSL sweep (relaxed threshold)
     out = out.join(fvg_bar)
     out = out.join(confirm)
 
