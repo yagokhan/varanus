@@ -1,0 +1,139 @@
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:14] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:15] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:23] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:24] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:32] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:33] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:42] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:42] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:52] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:26:52] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+============================================================
+  Varanus v5.2 Dual-Engine — Walk-Forward Validation
+  Gate : long_win_rate >= 40%, consistency >= 75%
+============================================================
+
+[+] Loaded params from best_params_v52.json
+    mss_lookback: 31
+    fvg_min_atr_ratio: 0.392
+    sweep_min_pct: 0.00641
+    fvg_max_age: 22
+    rvol_threshold: 1.287
+    rsi_oversold: 36
+    rsi_overbought: 58
+    max_holding: 31
+    xgb_n_estimators: 218
+    xgb_subsample: 0.957
+    xgb_lr: 0.060884936946609944
+    xgb_max_depth: 6
+    conf_thresh_short: 0.786
+    tp_atr_mult: 5.768
+    sl_atr_mult: 0.709
+    leverage_5x_trigger: 0.968
+    conf_thresh_long: 0.7334134502076471
+    tp_mult_long: 3.127323098746781
+    sl_mult_long: 0.786104563590133
+
+[+] Loading universe data...
+  ADA: 4379 x 4h candles
+  AVAX: 4379 x 4h candles
+  LINK: 4379 x 4h candles
+  DOT: 4379 x 4h candles
+  TRX: 4379 x 4h candles
+  NEAR: 4379 x 4h candles
+  UNI: 4343 x 4h candles
+  SUI: 4343 x 4h candles
+  ARB: 4379 x 4h candles
+  OP: 4379 x 4h candles
+  POL: 1000 x 4h candles
+  APT: 4343 x 4h candles
+  ATOM: 4379 x 4h candles
+  FIL: 4379 x 4h candles
+  ICP: 4379 x 4h candles
+
+[+] Loaded 15 assets.
+
+[+] Running 5-fold walk-forward validation...
+
+  [WFV] Fold 1: Train 2024-03-06-->2024-07-12 (18%) | Val 2024-07-16-->2024-10-20 (13%) | Test 2024-10-24-->2025-01-31 (14%)
+  [WFV] Fold 2: Train 2024-06-13-->2024-10-20 (18%) | Val 2024-10-24-->2025-01-27 (13%) | Test 2025-01-31-->2025-05-11 (14%)
+  [WFV] Fold 3: Train 2024-09-21-->2025-01-27 (18%) | Val 2025-01-31-->2025-05-07 (13%) | Test 2025-05-11-->2025-08-18 (14%)
+  [WFV] Fold 4: Train 2024-12-29-->2025-05-07 (18%) | Val 2025-05-11-->2025-08-14 (13%) | Test 2025-08-18-->2025-11-26 (14%)
+  [WFV] Fold 5: Train 2025-04-08-->2025-08-14 (18%) | Val 2025-08-18-->2025-11-22 (13%) | Test 2025-11-26-->2026-03-05 (14%)
+
+── Fold 1/5 ──
+  Trades: 23 (L:1 S:22) | HunterEff: 6728.835 | WR: 26.09% (L:0.0% S:27.27%) | Ret: 10.55% | MaxDD: -7.84% | Sharpe: 1.043 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 0
+
+── Fold 2/5 ──
+  Trades: 19 (L:3 S:16) | HunterEff: 15416.975 | WR: 36.84% (L:66.67% S:31.25%) | Ret: 17.95% | MaxDD: -5.82% | Sharpe: 1.632 | LongSharpe: 7.288 | DecayExits: 0 | MSSExits: 0
+
+── Fold 3/5 ──
+  Trades: 23 (L:5 S:18) | HunterEff: -139.390 | WR: 26.09% (L:20.0% S:27.78%) | Ret: -0.23% | MaxDD: -8.42% | Sharpe: 0.122 | LongSharpe: -16.71 | DecayExits: 0 | MSSExits: 0
+
+── Fold 4/5 ──
+  Trades: 46 (L:1 S:45) | HunterEff: 9755.239 | WR: 30.43% (L:100.0% S:28.89%) | Ret: 37.13% | MaxDD: -19.03% | Sharpe: 1.725 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 0 [DD BREACH]
+
+── Fold 5/5 ──
+  Trades: 54 (L:12 S:42) | HunterEff: 43599.978 | WR: 37.04% (L:41.67% S:35.71%) | Ret: 128.1% | MaxDD: -14.69% | Sharpe: 3.333 | LongSharpe: 5.794 | DecayExits: 0 | MSSExits: 0 [DD BREACH]
+
+WFV Summary — 4/5 folds passed Hunter gate
+Consistency: 80% (required: 75%)
+ fold  hunter_efficiency  total_return_pct  win_rate_pct  long_win_rate_pct  short_win_rate_pct  max_drawdown_pct  sharpe_ratio  long_sharpe  total_trades  long_trades  short_trades  signal_decay_exits  mss_invalidation_exits
+    1           6728.835             10.55         26.09               0.00               27.27             -7.84         1.043        0.000            23            1            22                   0                       0
+    2          15416.975             17.95         36.84              66.67               31.25             -5.82         1.632        7.288            19            3            16                   0                       0
+    3           -139.390             -0.23         26.09              20.00               27.78             -8.42         0.122      -16.710            23            5            18                   0                       0
+    4           9755.239             37.13         30.43             100.00               28.89            -19.03         1.725        0.000            46            1            45                   0                       0
+    5          43599.978            128.10         37.04              41.67               35.71            -14.69         3.333        5.794            54           12            42                   0                       0
+
+============================================================
+  FINAL WALK-FORWARD RESULTS
+============================================================
+
+  Consistency : 80%  (PASS)
+
+  Total Trades : 165  (L:22 S:143)
+  Overall WR   : 32.1%
+  Long WR      : 40.9%  (PASS — gate: >=40%)
+  Short WR     : 30.8%
+  Total PnL    : $9674.33
+
+  Per-Fold Summary:
+ fold  total_return_pct  win_rate_pct  long_win_rate_pct  short_win_rate_pct  max_drawdown_pct  sharpe_ratio  hunter_efficiency  total_trades
+    1             10.55         26.09               0.00               27.27             -7.84         1.043           6728.835            23
+    2             17.95         36.84              66.67               31.25             -5.82         1.632          15416.975            19
+    3             -0.23         26.09              20.00               27.78             -8.42         0.122           -139.390            23
+    4             37.13         30.43             100.00               28.89            -19.03         1.725           9755.239            46
+    5            128.10         37.04              41.67               35.71            -14.69         3.333          43599.978            54
+
+[+] Results saved to wfv_v52_results.csv
+============================================================

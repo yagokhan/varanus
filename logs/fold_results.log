@@ -1,0 +1,64 @@
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [06:48:52] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [06:49:01] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [06:49:11] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [06:49:21] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [06:49:30] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+=== v5.1 Best Params Walk-Forward Fold Analysis ===
+Params: conf=0.786 sl=0.709x tp=5.768x 5xlev@0.968 lr=0.0609 depth=6
+
+Loaded 15 assets
+
+  [WFV] Fold 1: Train 2024-03-06-->2024-07-12 (18%) | Val 2024-07-16-->2024-10-20 (13%) | Test 2024-10-24-->2025-01-31 (14%)
+  [WFV] Fold 2: Train 2024-06-13-->2024-10-20 (18%) | Val 2024-10-24-->2025-01-27 (13%) | Test 2025-01-31-->2025-05-11 (14%)
+  [WFV] Fold 3: Train 2024-09-21-->2025-01-27 (18%) | Val 2025-01-31-->2025-05-07 (13%) | Test 2025-05-11-->2025-08-18 (14%)
+  [WFV] Fold 4: Train 2024-12-29-->2025-05-07 (18%) | Val 2025-05-11-->2025-08-14 (13%) | Test 2025-08-18-->2025-11-26 (14%)
+  [WFV] Fold 5: Train 2025-04-08-->2025-08-14 (18%) | Val 2025-08-18-->2025-11-22 (13%) | Test 2025-11-26-->2026-03-05 (14%)
+
+── Fold 1/5 ──
+  Trades: 52 | HunterEff: 21700.369 | WR: 32.69% | MaxDD: -7.28% | DecayExits: 0 | MSSExits: 24
+
+── Fold 2/5 ──
+  Trades: 82 | HunterEff: 58140.719 | WR: 34.15% | MaxDD: -6.6% | DecayExits: 0 | MSSExits: 36
+
+── Fold 3/5 ──
+  Trades: 77 | HunterEff: 10172.900 | WR: 29.87% | MaxDD: -13.33% | DecayExits: 0 | MSSExits: 31 [DD BREACH]
+
+── Fold 4/5 ──
+  Trades: 78 | HunterEff: 141414.337 | WR: 44.87% | MaxDD: -8.36% | DecayExits: 0 | MSSExits: 19
+
+── Fold 5/5 ──
+  Trades: 88 | HunterEff: 141106.761 | WR: 40.91% | MaxDD: -9.9% | DecayExits: 0 | MSSExits: 30
+
+WFV Summary — 5/5 folds passed Hunter gate
+Consistency: 100% (required: 75%)
+ fold  hunter_efficiency  win_rate_pct  max_drawdown_pct  total_trades  signal_decay_exits  mss_invalidation_exits
+    1          21700.369         32.69             -7.28            52                   0                      24
+    2          58140.719         34.15             -6.60            82                   0                      36
+    3          10172.900         29.87            -13.33            77                   0                      31
+    4         141414.337         44.87             -8.36            78                   0                      19
+    5         141106.761         40.91             -9.90            88                   0                      30
+
+=== All Trades Summary ===
+Total trades: 377
+      count       sum    mean
+fold                         
+1        52   1579.79   30.38
+2        82   3837.29   46.80
+3        77   1356.05   17.61
+4        78  11822.24  151.57
+5        88  13969.57  158.75

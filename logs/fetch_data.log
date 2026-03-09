@@ -1,0 +1,45 @@
+=== Varanus v5.1 — Yahoo Finance Historical Data Fetch ===
+    Source   : Yahoo Finance (1h → resample to 4h)
+    From     : 2024-03-06  (~730 days)
+    Assets   : 15
+    Cache    : /home/gokhan/varanus_v51/varanus/data/cache
+
+  [ADA] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [AVAX] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [LINK] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [DOT] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [TRX] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [NEAR] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [UNI] Fetching... $UNI-USD: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:22+00:00)
+
+1 Failed download:
+['UNI-USD']: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:22+00:00)
+FAILED (no data)
+  [SUI] Fetching... $SUI-USD: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:22+00:00)
+
+1 Failed download:
+['SUI-USD']: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:22+00:00)
+FAILED (no data)
+  [ARB] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [OP] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [POL] Fetching... $POL-USD: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:25+00:00)
+
+1 Failed download:
+['POL-USD']: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:25+00:00)
+FAILED (no data)
+  [APT] Fetching... $APT-USD: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:26+00:00)
+
+1 Failed download:
+['APT-USD']: possibly delisted; no price data found  (1h 2024-03-06 -> 2026-03-05 17:34:26+00:00)
+FAILED (no data)
+  [ATOM] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [FIL] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+  [ICP] Fetching... OK — 4379 x 4h candles | 2024-03-06 → 2026-03-05
+
+=== Summary ===
+  Fetched : 11/15 assets
+  Avg 4h candles : 4379  (~730 days)
+
+  Min candles : 4379  →  est. train_len = 540  (need ≥ 800 for 8-fold)
+  ⚠  Insufficient for 8-fold. Need 6385 candles.
+  ✓  5-fold WFV works: train_len=772

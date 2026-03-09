@@ -1,0 +1,32 @@
+2026-03-06 08:31:57,112 | INFO     | run_paper                | Initialising Varanus Paper Trader | capital=$5000 | dry_run=True
+2026-03-06 08:31:57,112 | INFO     | varanus.paper_trader     | PaperTrader ready | capital=$5000.00 | open_trades=0 | dry_run=True
+2026-03-06 08:31:57,112 | INFO     | run_paper                | Training model on historical data (this takes ~60 s) ...
+2026-03-06 08:31:57,112 | INFO     | varanus.paper_trader     | Loading historical data from cache ...
+2026-03-06 08:31:57,507 | INFO     | varanus.paper_trader     | Loaded 15 / 15 assets from cache
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [08:32:11] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+2026-03-06 08:32:16,951 | INFO     | varanus.paper_trader     | Model trained | train=51051  val=5672  assets=15
+2026-03-06 08:32:16,952 | INFO     | run_paper                | Model ready.
+2026-03-06 08:32:16,953 | INFO     | run_paper                | Running single cycle ...
+2026-03-06 08:32:16,953 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 05:32 UTC  equity=$5000.00 ═══
+2026-03-06 08:32:19,307 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$5000.00  daily=0.0%  dd=0.0%
+[dry-run] No-signal alert:
+🔍 *VARANUS T2 — No Signal*
+Cycle: 2026-03-06 05:32 UTC
+Scanned 15 assets — no setup above confidence threshold
+Equity: $5,000.00 | Daily: +0.0%
+
+2026-03-06 08:32:19,307 | INFO     | run_paper                | Cycle complete | opened=0  closed=0  halted=False
+
+╔══════════ VARANUS PAPER TRADING STATUS ══════════╗
+  Equity:        $5,000.00  (initial: $5,000.00)
+  Total PnL:     +$0.00  (+0.0%)
+  Daily P&L:     +0.0%
+  Peak Drawdown: +0.0%
+  Halted:        No
+  Open trades:   0
+  Closed trades: 0
+╚══════════════════════════════════════════════════╝
+

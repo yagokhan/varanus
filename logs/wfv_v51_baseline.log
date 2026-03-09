@@ -1,0 +1,56 @@
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:36:52] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:43:54] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:50:00] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:55:35] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [15:59:10] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+Running v5.1 baseline WFV...
+  [WFV] Fold 1: Train 2024-03-06-->2024-07-12 (18%) | Val 2024-07-16-->2024-10-20 (13%) | Test 2024-10-24-->2025-01-31 (14%)
+  [WFV] Fold 2: Train 2024-06-13-->2024-10-20 (18%) | Val 2024-10-24-->2025-01-27 (13%) | Test 2025-01-31-->2025-05-11 (14%)
+  [WFV] Fold 3: Train 2024-09-21-->2025-01-27 (18%) | Val 2025-01-31-->2025-05-07 (13%) | Test 2025-05-11-->2025-08-18 (14%)
+  [WFV] Fold 4: Train 2024-12-29-->2025-05-07 (18%) | Val 2025-05-11-->2025-08-14 (13%) | Test 2025-08-18-->2025-11-26 (14%)
+  [WFV] Fold 5: Train 2025-04-08-->2025-08-14 (18%) | Val 2025-08-18-->2025-11-22 (13%) | Test 2025-11-26-->2026-03-05 (14%)
+
+── Fold 1/5 ──
+  Trades: 50 (L:0 S:50) | HunterEff: 21293.326 | WR: 28.0% (L:0.0% S:28.0%) | Ret: 30.83% | MaxDD: -7.24% | Sharpe: 2.488 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 24
+
+── Fold 2/5 ──
+  Trades: 75 (L:0 S:75) | HunterEff: 73500.673 | WR: 40.0% (L:0.0% S:40.0%) | Ret: 72.91% | MaxDD: -4.96% | Sharpe: 4.17 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 34
+
+── Fold 3/5 ──
+  Trades: 77 (L:0 S:77) | HunterEff: 7842.660 | WR: 25.97% (L:0.0% S:25.97%) | Ret: 21.46% | MaxDD: -13.68% | Sharpe: 1.68 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 30 [DD BREACH]
+
+── Fold 4/5 ──
+  Trades: 82 (L:0 S:82) | HunterEff: 84441.754 | WR: 42.68% (L:0.0% S:42.68%) | Ret: 251.47% | MaxDD: -14.89% | Sharpe: 4.96 | LongSharpe: 0.0 | DecayExits: 0 | MSSExits: 21 [DD BREACH]
+
+── Fold 5/5 ──
+  Trades: 87 (L:7 S:80) | HunterEff: 122929.299 | WR: 40.23% (L:57.14% S:38.75%) | Ret: 249.3% | MaxDD: -10.14% | Sharpe: 5.413 | LongSharpe: 9.074 | DecayExits: 0 | MSSExits: 31
+
+WFV Summary — 5/5 folds passed Hunter gate
+Consistency: 100% (required: 75%)
+ fold  hunter_efficiency  total_return_pct  win_rate_pct  long_win_rate_pct  short_win_rate_pct  max_drawdown_pct  sharpe_ratio  long_sharpe  total_trades  long_trades  short_trades  signal_decay_exits  mss_invalidation_exits
+    1          21293.326             30.83         28.00               0.00               28.00             -7.24         2.488        0.000            50            0            50                   0                      24
+    2          73500.673             72.91         40.00               0.00               40.00             -4.96         4.170        0.000            75            0            75                   0                      34
+    3           7842.660             21.46         25.97               0.00               25.97            -13.68         1.680        0.000            77            0            77                   0                      30
+    4          84441.754            251.47         42.68               0.00               42.68            -14.89         4.960        0.000            82            0            82                   0                      21
+    5         122929.299            249.30         40.23              57.14               38.75            -10.14         5.413        9.074            87            7            80                   0                      31
+v5.1 Total: 371 | Consistency: 100%
+Longs: 7 Shorts: 364
+Short WR: 35.7%
+ntry_price', 'direction', 'take_profit', 'stop_loss', 'position_usd', 'leverage', 'confidence', 'entry_confidence', 'breakeven_activated', 'rr_ratio', 'max_hold_bar', 'exit_ts', 'exit_price', 'outcome', 'pnl_usd', 'fold']
+Longs: 7 | Shorts: 364
+Short WR: 35.7%

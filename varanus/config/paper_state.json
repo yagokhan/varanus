@@ -1,0 +1,10 @@
+{
+  "initial_capital": 10000.0,
+  "equity": 10000.0,
+  "peak_equity": 10000.0,
+  "daily_start_equity": 10000.0,
+  "daily_start_date": "2026-03-07",
+  "open_trades": {},
+  "closed_trades": [],
+  "halted": false
+}

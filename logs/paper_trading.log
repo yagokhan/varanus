@@ -1,0 +1,41 @@
+2026-03-06 08:37:05,249 | INFO     | run_paper                | Initialising Varanus Paper Trader | capital=$10000 | dry_run=False
+2026-03-06 08:37:05,249 | INFO     | varanus.paper_trader     | PaperTrader ready | capital=$10000.00 | open_trades=0 | dry_run=False
+2026-03-06 08:37:05,249 | INFO     | run_paper                | Training model on historical data (this takes ~60 s) ...
+2026-03-06 08:37:05,250 | INFO     | varanus.paper_trader     | Loading historical data from cache ...
+2026-03-06 08:37:05,645 | INFO     | varanus.paper_trader     | Loaded 15 / 15 assets from cache
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [08:37:18] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+2026-03-06 08:37:24,677 | INFO     | varanus.paper_trader     | Model trained | train=51051  val=5672  assets=15
+2026-03-06 08:37:24,679 | INFO     | run_paper                | Model ready.
+2026-03-06 08:37:24,679 | INFO     | varanus.paper_trader     | Telegram listener started (heartbeat command active).
+2026-03-06 08:37:24,685 | INFO     | run_paper                | Scheduler started — cycles at 00:05 04:05 08:05 12:05 16:05 20:05 UTC
+2026-03-06 08:37:24,685 | INFO     | run_paper                | Press Ctrl+C to stop.
+2026-03-06 10:52:11,099 | INFO     | varanus.paper_trader     | Status request received: 'heartbeat'
+2026-03-06 11:05:00,000 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 08:05 UTC  equity=$10000.00 ═══
+2026-03-06 11:05:02,165 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-06 14:07:37,613 | INFO     | varanus.paper_trader     | Status request received: 'heartbeat'
+2026-03-06 15:05:00,002 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 12:05 UTC  equity=$10000.00 ═══
+2026-03-06 15:05:02,227 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-06 19:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 16:05 UTC  equity=$10000.00 ═══
+2026-03-06 19:05:02,444 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-06 23:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 20:05 UTC  equity=$10000.00 ═══
+2026-03-06 23:05:02,121 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 03:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 00:05 UTC  equity=$10000.00 ═══
+2026-03-07 03:05:02,547 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 07:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 04:05 UTC  equity=$10000.00 ═══
+2026-03-07 07:05:02,096 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 11:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 08:05 UTC  equity=$10000.00 ═══
+2026-03-07 11:05:02,200 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+%  dd=0.0%
+2026-03-06 19:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 16:05 UTC  equity=$10000.00 ═══
+2026-03-06 19:05:02,444 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-06 23:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-06 20:05 UTC  equity=$10000.00 ═══
+2026-03-06 23:05:02,121 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 03:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 00:05 UTC  equity=$10000.00 ═══
+2026-03-07 03:05:02,547 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 07:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 04:05 UTC  equity=$10000.00 ═══
+2026-03-07 07:05:02,096 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%
+2026-03-07 11:05:00,001 | INFO     | varanus.paper_trader     | ═══ Paper cycle  2026-03-07 08:05 UTC  equity=$10000.00 ═══
+2026-03-07 11:05:02,200 | INFO     | varanus.paper_trader     | Cycle done | open=0  closed=0  new=0  equity=$10000.00  daily=0.0%  dd=0.0%

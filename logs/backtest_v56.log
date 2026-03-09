@@ -1,0 +1,158 @@
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:53:51] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:53:52] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:02] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:03] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:12] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:14] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:3023: RuntimeWarning: invalid value encountered in divide
+  c /= stddev[:, None]
+/home/gokhan/.local/lib/python3.12/site-packages/numpy/lib/_function_base_impl.py:3024: RuntimeWarning: invalid value encountered in divide
+  c /= stddev[None, :]
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:23] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:24] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:34] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "scale_pos_weight", "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+/home/gokhan/.local/lib/python3.12/site-packages/xgboost/training.py:200: UserWarning: [13:54:35] WARNING: /__w/xgboost/xgboost/src/learner.cc:782: 
+Parameters: { "use_label_encoder" } are not used.
+
+  bst.update(dtrain, iteration=i, fobj=obj)
+=================================================================
+  Varanus v5.6 The Golden Ratio — Full Backtest
+  Short Hunter FROZEN (Trial #183) + Long Runner (Trial #293)
+=================================================================
+
+[+] Params: best_params_v56.json
+    mss_lookback: 31
+    fvg_min_atr_ratio: 0.392
+    sweep_min_pct: 0.00641
+    fvg_max_age: 22
+    rvol_threshold: 1.287
+    rsi_oversold: 36
+    rsi_overbought: 58
+    max_holding: 31
+    xgb_n_estimators: 218
+    xgb_subsample: 0.957
+    xgb_lr: 0.060884936946609944
+    xgb_max_depth: 6
+    conf_thresh_short: 0.786
+    tp_atr_mult: 5.768
+    sl_atr_mult: 0.709
+    leverage_5x_trigger: 0.968
+    conf_thresh_long: 0.6693793313039341
+    tp_mult_long: 2.3734654473779395
+    sl_mult_long: 0.9312165423422211
+    rsi_1d_long_limit: 61
+    p_short_max_for_long: 0.7461942784777728
+
+[+] Loading universe data ...
+  ADA: 4379 x 4h candles
+  AVAX: 4379 x 4h candles
+  LINK: 4379 x 4h candles
+  DOT: 4379 x 4h candles
+  TRX: 4379 x 4h candles
+  NEAR: 4379 x 4h candles
+  UNI: 4343 x 4h candles
+  SUI: 4343 x 4h candles
+  ARB: 4379 x 4h candles
+  OP: 4379 x 4h candles
+  POL: 1000 x 4h candles
+  APT: 4343 x 4h candles
+  ATOM: 4379 x 4h candles
+  FIL: 4379 x 4h candles
+  ICP: 4379 x 4h candles
+
+[+] Loaded 15 assets.
+
+[+] Running 5-fold walk-forward backtest ...
+
+  [WFV] Fold 1: Train 2024-03-06-->2024-07-12 (18%) | Val 2024-07-16-->2024-10-20 (13%) | Test 2024-10-24-->2025-01-31 (14%)
+  [WFV] Fold 2: Train 2024-06-13-->2024-10-20 (18%) | Val 2024-10-24-->2025-01-27 (13%) | Test 2025-01-31-->2025-05-11 (14%)
+  [WFV] Fold 3: Train 2024-09-21-->2025-01-27 (18%) | Val 2025-01-31-->2025-05-07 (13%) | Test 2025-05-11-->2025-08-18 (14%)
+  [WFV] Fold 4: Train 2024-12-29-->2025-05-07 (18%) | Val 2025-05-11-->2025-08-14 (13%) | Test 2025-08-18-->2025-11-26 (14%)
+  [WFV] Fold 5: Train 2025-04-08-->2025-08-14 (18%) | Val 2025-08-18-->2025-11-22 (13%) | Test 2025-11-26-->2026-03-05 (14%)
+
+── Fold 1/5 ──
+  Trades: 68 (L:23 S:45) | HunterEff: 31737.211 | WR: 35.29% (L:47.83% S:28.89%) | Ret: 57.25% | MaxDD: -9.02% | Sharpe: 3.775 | LongSharpe: 6.483 | DecayExits: 0 | MSSExits: 22
+
+── Fold 2/5 ──
+  Trades: 103 (L:48 S:55) | HunterEff: 95432.309 | WR: 41.75% (L:43.75% S:40.0%) | Ret: 200.41% | MaxDD: -10.5% | Sharpe: 6.197 | LongSharpe: 6.318 | DecayExits: 0 | MSSExits: 22
+
+── Fold 3/5 ──
+  Trades: 94 (L:39 S:55) | HunterEff: 23301.409 | WR: 34.04% (L:46.15% S:25.45%) | Ret: 55.36% | MaxDD: -11.88% | Sharpe: 2.833 | LongSharpe: 2.615 | DecayExits: 0 | MSSExits: 24
+
+── Fold 4/5 ──
+  Trades: 101 (L:23 S:78) | HunterEff: 77905.336 | WR: 43.56% (L:47.83% S:42.31%) | Ret: 299.47% | MaxDD: -19.22% | Sharpe: 5.131 | LongSharpe: 6.432 | DecayExits: 0 | MSSExits: 27 [DD BREACH]
+
+── Fold 5/5 ──
+  Trades: 111 (L:40 S:71) | HunterEff: 124395.073 | WR: 36.94% (L:40.0% S:35.21%) | Ret: 278.15% | MaxDD: -11.18% | Sharpe: 4.919 | LongSharpe: 3.664 | DecayExits: 0 | MSSExits: 27
+
+WFV Summary — 5/5 folds passed Hunter gate
+Consistency: 100% (required: 75%)
+ fold  hunter_efficiency  total_return_pct  win_rate_pct  long_win_rate_pct  short_win_rate_pct  max_drawdown_pct  sharpe_ratio  long_sharpe  total_trades  long_trades  short_trades  signal_decay_exits  mss_invalidation_exits
+    1          31737.211             57.25         35.29              47.83               28.89             -9.02         3.775        6.483            68           23            45                   0                      22
+    2          95432.309            200.41         41.75              43.75               40.00            -10.50         6.197        6.318           103           48            55                   0                      22
+    3          23301.409             55.36         34.04              46.15               25.45            -11.88         2.833        2.615            94           39            55                   0                      24
+    4          77905.336            299.47         43.56              47.83               42.31            -19.22         5.131        6.432           101           23            78                   0                      27
+    5         124395.073            278.15         36.94              40.00               35.21            -11.18         4.919        3.664           111           40            71                   0                      27
+
+=================================================================
+  BACKTEST RESULTS — v5.6 The Golden Ratio
+=================================================================
+
+  Consistency   : 100%  (PASS)
+  Total Trades  : 477  (L:173  S:304)
+  Overall WR    : 38.6%
+  Long WR       : 44.5%  (PASS — gate >=41%)
+  Short WR      : 35.2%
+  Total PnL     : $44,532.07  (890.6% on $5,000)
+  Long PnL      : $13,392.02
+  Short PnL     : $31,140.05
+  Profit Factor : 2.77
+  Expectancy    : $88.87/trade
+  Avg Win       : $378.64  |  Avg Loss: $-93.10
+  Max DD (worst): -19.2%
+  Avg Sharpe    : 4.571
+
+  Exit Breakdown:
+    sl                      : 207
+    mss_invalidation        : 122
+    tp                      : 112
+    time                    : 36
+
+  Per-Fold Summary:
+ fold  total_trades  long_trades  short_trades  total_return_pct  win_rate_pct  long_win_rate_pct  short_win_rate_pct  max_drawdown_pct  sharpe_ratio  hunter_efficiency  net_profit_usd
+    1            68           23            45             57.25         35.29              47.83               28.89             -9.02         3.775          31737.211         2862.70
+    2           103           48            55            200.41         41.75              43.75               40.00            -10.50         6.197          95432.309        10020.39
+    3            94           39            55             55.36         34.04              46.15               25.45            -11.88         2.833          23301.409         2768.21
+    4           101           23            78            299.47         43.56              47.83               42.31            -19.22         5.131          77905.336        14973.41
+    5           111           40            71            278.15         36.94              40.00               35.21            -11.18         4.919         124395.073        13907.37
+
+[+] Trade log saved  : varanusv56_backtest_trades.csv
+[+] Summary saved    : varanusv56_backtest_summary.csv
+=================================================================
